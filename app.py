@@ -267,6 +267,9 @@ def coinalyze_get(endpoint, params, api_key):
 
     response = requests.get(url, params=request_params, timeout=20)
 
+    st.session_state[f"debug_last_{endpoint}_status"] = response.status_code
+    st.session_state[f"debug_last_{endpoint}_text"] = response.text[:800]
+
     if response.status_code != 200:
         raise Exception(f"Erreur Coinalyze {response.status_code}: {response.text}")
 
@@ -436,6 +439,10 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
 
     interval, from_ts, to_ts = get_pa_interval_and_range(comparison_label)
 
+    st.session_state["debug_ohlcv_interval"] = interval
+    st.session_state["debug_ohlcv_from"] = from_ts
+    st.session_state["debug_ohlcv_to"] = to_ts
+
     all_data = []
     chunk_size = 20
 
@@ -455,8 +462,8 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
             if isinstance(data, list):
                 all_data.extend(data)
 
-        except Exception:
-            pass
+        except Exception as e:
+            st.session_state["debug_ohlcv_error"] = str(e)
 
     return all_data
 
@@ -471,17 +478,33 @@ def select_coinalyze_market(symbol, markets):
 
     for market in markets:
         cz_symbol = str(market.get("symbol", "")).upper()
+        symbol_on_exchange = str(market.get("symbol_on_exchange", "")).upper()
+        base_asset = str(market.get("base_asset", "")).upper()
+        quote_asset = str(market.get("quote_asset", "")).upper()
         exchange = str(market.get("exchange", "")).lower()
 
-        if not cz_symbol:
+        is_perpetual = market.get("is_perpetual", True)
+        margined = str(market.get("margined", "")).upper()
+
+        text_blob = f"{cz_symbol} {symbol_on_exchange} {base_asset} {quote_asset}"
+
+        direct_match = (
+            f"{symbol}USDT_PERP" in text_blob
+            or f"{symbol}USD_PERP" in text_blob
+            or f"{symbol}-USDT" in text_blob
+            or f"{symbol}/USDT" in text_blob
+            or f"{symbol}USDT" in text_blob
+        )
+
+        asset_match = (
+            base_asset == symbol
+            and quote_asset in ["USDT", "USD"]
+        )
+
+        if not direct_match and not asset_match:
             continue
 
-        valid_patterns = [
-            f"{symbol}USDT_PERP",
-            f"{symbol}USD_PERP"
-        ]
-
-        if not any(pattern in cz_symbol for pattern in valid_patterns):
+        if is_perpetual is False:
             continue
 
         candidates.append(market)
@@ -491,6 +514,7 @@ def select_coinalyze_market(symbol, markets):
 
     def score_market(m):
         cz_symbol = str(m.get("symbol", "")).upper()
+        symbol_on_exchange = str(m.get("symbol_on_exchange", "")).upper()
         exchange = str(m.get("exchange", "")).lower()
         score = 0
 
@@ -505,11 +529,20 @@ def select_coinalyze_market(symbol, markets):
         elif "gate" in exchange:
             score += 50
 
-        if "USDT_PERP" in cz_symbol:
+        if "USDT" in cz_symbol or "USDT" in symbol_on_exchange:
             score += 20
 
-        if "_PERP" in cz_symbol:
+        if "PERP" in cz_symbol or "PERP" in symbol_on_exchange:
             score += 20
+
+        if m.get("has_ohlcv_data"):
+            score += 10
+
+        if m.get("has_open_interest_data"):
+            score += 10
+
+        if m.get("has_funding_rate_data"):
+            score += 10
 
         return score
 
@@ -520,8 +553,12 @@ def select_coinalyze_market(symbol, markets):
 def build_coinalyze_symbol_map(symbols, api_key):
     try:
         markets = fetch_coinalyze_future_markets(api_key)
-    except Exception:
+    except Exception as e:
+        st.session_state["debug_future_markets_error"] = str(e)
         markets = []
+
+    st.session_state["debug_markets_count"] = len(markets)
+    st.session_state["debug_markets_sample"] = markets[:5] if isinstance(markets, list) else markets
 
     result = {}
 
@@ -531,13 +568,17 @@ def build_coinalyze_symbol_map(symbols, api_key):
         if market is None:
             result[symbol] = {
                 "coinalyze_symbol": None,
-                "exchange": "N/A"
+                "exchange": "N/A",
+                "raw_market": None
             }
         else:
             result[symbol] = {
                 "coinalyze_symbol": market.get("symbol"),
-                "exchange": market.get("exchange", "N/A")
+                "exchange": market.get("exchange", "N/A"),
+                "raw_market": market
             }
+
+    st.session_state["debug_symbol_map"] = result
 
     return result
 
@@ -848,6 +889,8 @@ def get_futures_data_for_symbols(symbols, api_key):
         if data["coinalyze_symbol"]
     ]
 
+    st.session_state["debug_coinalyze_symbols_used"] = coinalyze_symbols
+
     if not coinalyze_symbols:
         return {symbol: get_fallback_futures_data() for symbol in symbols}
 
@@ -855,12 +898,14 @@ def get_futures_data_for_symbols(symbols, api_key):
 
     try:
         funding_data = fetch_coinalyze_funding(symbols_csv, api_key)
-    except Exception:
+    except Exception as e:
+        st.session_state["debug_funding_error"] = str(e)
         funding_data = []
 
     try:
         oi_data = fetch_coinalyze_open_interest(symbols_csv, api_key)
-    except Exception:
+    except Exception as e:
+        st.session_state["debug_oi_error"] = str(e)
         oi_data = []
 
     interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
@@ -873,13 +918,20 @@ def get_futures_data_for_symbols(symbols, api_key):
             to_ts,
             api_key
         )
-    except Exception:
+    except Exception as e:
+        st.session_state["debug_oi_history_error"] = str(e)
         oi_history = []
 
     try:
         ohlcv_history = fetch_ohlcv_in_chunks(coinalyze_symbols, api_key)
-    except Exception:
+    except Exception as e:
+        st.session_state["debug_ohlcv_error"] = str(e)
         ohlcv_history = []
+
+    st.session_state["debug_funding_count"] = len(funding_data) if isinstance(funding_data, list) else "N/A"
+    st.session_state["debug_oi_count"] = len(oi_data) if isinstance(oi_data, list) else "N/A"
+    st.session_state["debug_oi_history_count"] = len(oi_history) if isinstance(oi_history, list) else "N/A"
+    st.session_state["debug_ohlcv_count"] = len(ohlcv_history) if isinstance(ohlcv_history, list) else "N/A"
 
     funding_map = map_list_by_symbol(funding_data)
     oi_map = map_list_by_symbol(oi_data)
@@ -1450,7 +1502,45 @@ if scan_button:
 
         futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
 
-        with st.expander("Debug Coinalyze", expanded=False):
+        with st.expander("Debug Coinalyze", expanded=True):
+            st.write("Nombre de marchés futures Coinalyze trouvés :")
+            st.write(st.session_state.get("debug_markets_count", "Non récupéré"))
+
+            st.write("Exemple de marchés reçus :")
+            st.write(st.session_state.get("debug_markets_sample", "Aucun exemple"))
+
+            st.write("Matching symboles :")
+            st.write(st.session_state.get("debug_symbol_map", {}))
+
+            st.write("Symboles Coinalyze utilisés pour les endpoints :")
+            st.write(st.session_state.get("debug_coinalyze_symbols_used", []))
+
+            st.write("Nombre de réponses Funding / OI / OI history / OHLCV :")
+            st.write({
+                "funding": st.session_state.get("debug_funding_count", "N/A"),
+                "oi": st.session_state.get("debug_oi_count", "N/A"),
+                "oi_history": st.session_state.get("debug_oi_history_count", "N/A"),
+                "ohlcv": st.session_state.get("debug_ohlcv_count", "N/A"),
+            })
+
+            st.write("Erreurs éventuelles :")
+            st.write({
+                "future_markets": st.session_state.get("debug_future_markets_error", None),
+                "funding": st.session_state.get("debug_funding_error", None),
+                "oi": st.session_state.get("debug_oi_error", None),
+                "oi_history": st.session_state.get("debug_oi_history_error", None),
+                "ohlcv": st.session_state.get("debug_ohlcv_error", None),
+            })
+
+            st.write("Dernières réponses API Coinalyze :")
+            st.write({
+                "future-markets status": st.session_state.get("debug_last_future-markets_status", None),
+                "future-markets text": st.session_state.get("debug_last_future-markets_text", None),
+                "ohlcv-history status": st.session_state.get("debug_last_ohlcv-history_status", None),
+                "ohlcv-history text": st.session_state.get("debug_last_ohlcv-history_text", None),
+            })
+
+            st.write("Données futures finales :")
             st.write(futures_map)
 
         for symbol in symbols:
@@ -1591,18 +1681,6 @@ if scan_button:
                 best["Action"]
             )
 
-        st.markdown(f"""
-        <div class="binance-card">
-            <div class="binance-card-title">Résumé rapide</div>
-            <div class="binance-card-value">
-                Le token <span class="yellow">{best['Crypto']}</span> ressort en premier car son score dominant est le plus élevé de la watchlist.
-            </div>
-            <div class="small-text">
-                Raison : {best['Raison décision']}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
         with st.expander("Calcul technique complet", expanded=False):
             tech1, tech2, tech3, tech4 = st.columns(4)
 
@@ -1626,27 +1704,9 @@ if scan_button:
                 info_card("Funding / OI", f"{best['Funding biais']} / {best['OI tendance']}", f"OI variation : {best['OI variation %']} %")
                 info_card("Score final", f"L {best['Score Long Total']} / S {best['Score Short Total']}", "Scores finaux.")
 
-            tech5, tech6, tech7, tech8 = st.columns(4)
-
-            with tech5:
-                info_card("High PA", best["High PA"], "Plus haut sur bougies analysées.")
-                info_card("Low PA", best["Low PA"], "Plus bas sur bougies analysées.")
-
-            with tech6:
-                info_card("Funding brut", f"{best['Funding %']} %", f"Biais : {best['Funding biais']}")
-                info_card("Open Interest brut", best["Open Interest"], f"Exchange : {best['Futures exchange']}")
-
-            with tech7:
-                info_card("Entrée", best["Entrée"], f"Sens : {best['Sens']}")
-                info_card("Stop", best["Stop"], f"Distance : {best['Distance stop %']} %")
-
-            with tech8:
-                info_card("TP1 / TP2", f"{best['TP1']} / {best['TP2']}", "Objectifs en R/R.")
-                info_card("Cible range", best["Cible range"], "Objectif indicatif.")
-
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies/OI/funding : Coinalyze. "
-            "Cette version lit la vraie PA via OHLCV pour mieux repérer les structures propres."
+            "Le bloc Debug Coinalyze sert à vérifier pourquoi la PA réelle reste en N/A."
         )
 
     if errors:
