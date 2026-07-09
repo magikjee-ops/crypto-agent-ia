@@ -11,111 +11,94 @@ st.set_page_config(page_title="Crypto Agent IA", layout="wide")
 
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0B0E11;
-        color: #EAECEF;
-    }
-
-    section[data-testid="stSidebar"] {
-        background-color: #181A20;
-        border-right: 1px solid #2B3139;
-    }
-
-    h1, h2, h3 {
-        color: #F0B90B !important;
-    }
-
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-    }
-
-    div[data-testid="stMetric"] {
-        background-color: #181A20;
-        border: 1px solid #2B3139;
-        padding: 16px;
-        border-radius: 12px;
-    }
-
-    div[data-testid="stMetricLabel"] {
-        color: #848E9C !important;
-    }
-
-    div[data-testid="stMetricValue"] {
-        color: #EAECEF !important;
-        font-size: 1.05rem;
-    }
-
-    .binance-card {
-        background-color: #181A20;
-        border: 1px solid #2B3139;
-        border-radius: 12px;
-        padding: 16px;
-        min-height: 115px;
-        margin-bottom: 12px;
-    }
-
-    .binance-card-title {
-        color: #848E9C;
-        font-size: 0.85rem;
-        margin-bottom: 8px;
-    }
-
-    .binance-card-value {
-        color: #EAECEF;
-        font-size: 1.05rem;
-        font-weight: 600;
-    }
-
-    .yellow {
-        color: #F0B90B;
-        font-weight: 700;
-    }
-
-    .small-text {
-        color: #848E9C;
-        font-size: 0.88rem;
-    }
-
-    .stButton > button {
-        background-color: #F0B90B;
-        color: #0B0E11;
-        border: none;
-        font-weight: 700;
-        border-radius: 8px;
-        padding: 0.6rem 1rem;
-        width: 100%;
-    }
-
-    .stButton > button:hover {
-        background-color: #FFD33D;
-        color: #0B0E11;
-        border: none;
-    }
-
-    div[data-testid="stDataFrame"] {
-        background-color: #181A20;
-        border-radius: 12px;
-    }
-
-    .top-box {
-        background-color: #181A20;
-        border: 1px solid #2B3139;
-        border-radius: 12px;
-        padding: 14px 18px;
-        margin-bottom: 16px;
-    }
-
-    .top-title {
-        color: #F0B90B;
-        font-weight: 700;
-        font-size: 1rem;
-    }
-
-    .top-sub {
-        color: #848E9C;
-        font-size: 0.9rem;
-    }
+.stApp {
+    background-color: #0B0E11;
+    color: #EAECEF;
+}
+section[data-testid="stSidebar"] {
+    background-color: #181A20;
+    border-right: 1px solid #2B3139;
+}
+h1, h2, h3 {
+    color: #F0B90B !important;
+}
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+}
+div[data-testid="stMetric"] {
+    background-color: #181A20;
+    border: 1px solid #2B3139;
+    padding: 16px;
+    border-radius: 12px;
+}
+div[data-testid="stMetricLabel"] {
+    color: #848E9C !important;
+}
+div[data-testid="stMetricValue"] {
+    color: #EAECEF !important;
+    font-size: 1.05rem;
+}
+.binance-card {
+    background-color: #181A20;
+    border: 1px solid #2B3139;
+    border-radius: 12px;
+    padding: 16px;
+    min-height: 115px;
+    margin-bottom: 12px;
+}
+.binance-card-title {
+    color: #848E9C;
+    font-size: 0.85rem;
+    margin-bottom: 8px;
+}
+.binance-card-value {
+    color: #EAECEF;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.yellow {
+    color: #F0B90B;
+    font-weight: 700;
+}
+.small-text {
+    color: #848E9C;
+    font-size: 0.88rem;
+}
+.stButton > button {
+    background-color: #F0B90B;
+    color: #0B0E11;
+    border: none;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    width: 100%;
+}
+.stButton > button:hover {
+    background-color: #FFD33D;
+    color: #0B0E11;
+    border: none;
+}
+div[data-testid="stDataFrame"] {
+    background-color: #181A20;
+    border-radius: 12px;
+}
+.top-box {
+    background-color: #181A20;
+    border: 1px solid #2B3139;
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+}
+.top-title {
+    color: #F0B90B;
+    font-weight: 700;
+    font-size: 1rem;
+}
+.top-sub {
+    color: #848E9C;
+    font-size: 0.9rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -131,11 +114,7 @@ default_watchlist = (
 )
 
 with st.sidebar.expander("Watchlist", expanded=False):
-    watchlist = st.text_area(
-        "Panier de cryptos",
-        default_watchlist,
-        height=180
-    )
+    watchlist = st.text_area("Panier de cryptos", default_watchlist, height=180)
 
 comparison_label = st.sidebar.selectbox(
     "Temporalité d'analyse",
@@ -171,13 +150,9 @@ use_futures_confirm = st.sidebar.checkbox(
 scan_button = st.sidebar.button("Scanner maintenant")
 
 if use_futures_confirm:
-    st.sidebar.caption(
-        "Mode complet : bougies + OI + funding. Plus lourd pour Coinalyze."
-    )
+    st.sidebar.caption("Mode complet : bougies + OI + funding. Plus lourd pour Coinalyze.")
 else:
-    st.sidebar.caption(
-        "Mode stable : bougies / PA réelle uniquement. OI + funding désactivés pour éviter les erreurs 429."
-    )
+    st.sidebar.caption("Mode stable : bougies / PA réelle uniquement. OI + funding désactivés pour éviter les erreurs 429.")
 
 # =========================
 # HEADER
@@ -213,6 +188,7 @@ def info_card(title, value, extra=""):
     </div>
     """, unsafe_allow_html=True)
 
+
 # =========================
 # SECRETS
 # =========================
@@ -222,6 +198,7 @@ def get_secret(name):
         return st.secrets[name]
     except Exception:
         return None
+
 
 # =========================
 # API COINMARKETCAP
@@ -264,6 +241,7 @@ def extract_first_coin(data, symbol):
 
     return item
 
+
 # =========================
 # API COINALYZE
 # =========================
@@ -295,19 +273,13 @@ def fetch_coinalyze_future_markets(api_key):
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
-
-    return coinalyze_get(
-        "funding-rate",
-        {"symbols": symbols_csv},
-        api_key
-    )
+    return coinalyze_get("funding-rate", {"symbols": symbols_csv}, api_key)
 
 
 @st.cache_data(ttl=600)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "open-interest",
         {
@@ -322,7 +294,6 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "open-interest-history",
         {
@@ -340,7 +311,6 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "ohlcv-history",
         {
@@ -351,6 +321,7 @@ def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key
         },
         api_key
     )
+
 
 # =========================
 # TIMEFRAMES
@@ -368,19 +339,19 @@ def get_pa_interval_and_range(comparison_label):
         return "15min", now - 24 * 3600, now
 
     if comparison_label == "4h":
-        return "30min", now - 3 * 24 * 3600, now
+        return "1hour", now - 4 * 24 * 3600, now
 
     if comparison_label == "12h":
         return "1hour", now - 5 * 24 * 3600, now
 
     if comparison_label == "1 jour":
-        return "1hour", now - 7 * 24 * 3600, now
+        return "4hour", now - 10 * 24 * 3600, now
 
     if comparison_label == "7 jours":
         return "4hour", now - 21 * 24 * 3600, now
 
     if comparison_label == "30 jours":
-        return "daily", now - 90 * 24 * 3600, now
+        return "4hour", now - 45 * 24 * 3600, now
 
     return "1hour", now - 7 * 24 * 3600, now
 
@@ -423,6 +394,7 @@ def get_perf_from_quote(quote, comparison_label):
         return quote.get("percent_change_30d", 0) or 0
 
     return 0
+
 
 # =========================
 # OUTILS
@@ -479,6 +451,7 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
             st.session_state["debug_ohlcv_error"] = str(e)
 
     return all_data
+
 
 # =========================
 # MATCHING COINALYZE
@@ -579,6 +552,7 @@ def build_coinalyze_symbol_map(symbols, api_key):
     st.session_state["debug_symbol_map"] = result
 
     return result
+
 
 # =========================
 # PRICE ACTION RÉELLE
@@ -755,6 +729,7 @@ def analyze_real_price_action(ohlcv_item):
         "Low PA": round(low_range, 6)
     }
 
+
 # =========================
 # OI / FUNDING
 # =========================
@@ -877,14 +852,12 @@ def get_futures_data_for_symbols(symbols, api_key):
 
     symbols_csv = ",".join(coinalyze_symbols)
 
-    # Bougies toujours actives
     try:
         ohlcv_history = fetch_ohlcv_in_chunks(coinalyze_symbols, api_key)
     except Exception as e:
         st.session_state["debug_ohlcv_error"] = str(e)
         ohlcv_history = []
 
-    # OI + funding optionnels
     if use_futures_confirm:
         try:
             funding_data = fetch_coinalyze_funding(symbols_csv, api_key)
@@ -987,6 +960,7 @@ def get_futures_data_for_symbols(symbols, api_key):
         result[symbol].update(pa_real_data)
 
     return result
+
 
 # =========================
 # SCORING
@@ -1176,6 +1150,7 @@ def define_bias(score_long, score_short, mode):
         return "Surveillance short", "Attendre confirmation short", "SHORT"
 
     return "Pas prioritaire", "Rien à faire", "NONE"
+
 
 # =========================
 # PLAN TRADING
@@ -1444,6 +1419,7 @@ def build_row(symbol, coin, btc_perf, futures_data):
 
     return row
 
+
 # =========================
 # SCAN
 # =========================
@@ -1494,6 +1470,9 @@ if scan_button:
 
             st.write("Symboles Coinalyze utilisés pour les endpoints :")
             st.write(st.session_state.get("debug_coinalyze_symbols_used", []))
+
+            st.write("Intervalle OHLCV utilisé :")
+            st.write(st.session_state.get("debug_ohlcv_interval", "N/A"))
 
             st.write("Nombre de réponses Funding / OI / OI history / OHLCV :")
             st.write({
@@ -1682,7 +1661,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies : Coinalyze. "
-            "OI + Funding sont optionnels pour limiter les erreurs 429."
+            "4h/1j/30j corrigés avec des intervalles Coinalyze plus compatibles."
         )
 
     if errors:
