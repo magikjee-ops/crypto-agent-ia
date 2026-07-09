@@ -273,13 +273,19 @@ def fetch_coinalyze_future_markets(api_key):
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
-    return coinalyze_get("funding-rate", {"symbols": symbols_csv}, api_key)
+
+    return coinalyze_get(
+        "funding-rate",
+        {"symbols": symbols_csv},
+        api_key
+    )
 
 
 @st.cache_data(ttl=600)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "open-interest",
         {
@@ -294,6 +300,7 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "open-interest-history",
         {
@@ -311,6 +318,7 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "ohlcv-history",
         {
@@ -335,8 +343,7 @@ def rounded_now():
 def get_pa_interval_and_range(comparison_label):
     now = rounded_now()
 
-    # Version compatible : on force toutes les PA en 15min,
-    # car c'est l'intervalle qui fonctionne sur ton app.
+    # On force tout en 15min, car c'est l'intervalle qui fonctionne sur ton app.
     if comparison_label == "1h":
         return "15min", now - 24 * 3600, now
 
@@ -431,11 +438,22 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
     st.session_state["debug_ohlcv_to"] = to_ts
 
     all_data = []
-    chunk_size = 20
+
+    # Requêtes par paquets de 5 pour éviter les erreurs 429.
+    chunk_size = 5
+    total_chunks = (len(coinalyze_symbols) + chunk_size - 1) // chunk_size
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
 
     for i in range(0, len(coinalyze_symbols), chunk_size):
+        chunk_number = (i // chunk_size) + 1
         chunk = coinalyze_symbols[i:i + chunk_size]
         symbols_csv = ",".join(chunk)
+
+        status_text.info(
+            f"Récupération des bougies Coinalyze : paquet {chunk_number}/{total_chunks} — {', '.join(chunk)}"
+        )
 
         try:
             data = fetch_coinalyze_ohlcv_history(
@@ -451,6 +469,13 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
 
         except Exception as e:
             st.session_state["debug_ohlcv_error"] = str(e)
+
+        progress_bar.progress(chunk_number / total_chunks)
+
+        # Pause volontaire pour ne pas spammer Coinalyze.
+        time.sleep(1.2)
+
+    status_text.success("Bougies Coinalyze récupérées par paquets de 5.")
 
     return all_data
 
@@ -1663,7 +1688,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies : Coinalyze. "
-            "Toutes les temporalités utilisent des bougies 15min pour éviter les N/A."
+            "Toutes les temporalités utilisent les bougies 15min. Les requêtes OHLCV sont faites par paquets de 5."
         )
 
     if errors:
@@ -1677,7 +1702,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
         <div class="small-text">
-            Version stable : toutes les PA utilisent les bougies 15min Coinalyze. OI + Funding optionnels.
+            Version stable : bougies 15min Coinalyze + requêtes par paquets de 5. OI + Funding optionnels.
         </div>
     </div>
     """, unsafe_allow_html=True)
