@@ -1,6 +1,7 @@
-import streamlit as st
-import pandas as pd
+import time
 import requests
+import pandas as pd
+import streamlit as st
 
 st.set_page_config(page_title="Crypto Agent IA", layout="wide")
 
@@ -68,16 +69,6 @@ st.markdown("""
 
     .yellow {
         color: #F0B90B;
-        font-weight: 700;
-    }
-
-    .green {
-        color: #0ECB81;
-        font-weight: 700;
-    }
-
-    .red {
-        color: #F6465D;
         font-weight: 700;
     }
 
@@ -175,21 +166,20 @@ max_tokens = st.sidebar.slider(
 scan_button = st.sidebar.button("Scanner maintenant")
 
 st.sidebar.caption(
-    "Version CoinMarketCap : cloud compatible. Pas de blocage Binance. "
-    "Les données futures/funding/OI sont désactivées dans cette version."
+    "CoinMarketCap = prix/perf/volume. Coinalyze = funding + open interest."
 )
 
 # =========================
 # HEADER
 # =========================
 
-st.title("Crypto Agent IA — Scanner CoinMarketCap")
+st.title("Crypto Agent IA — Scanner CoinMarketCap + Coinalyze")
 
 st.markdown(f"""
 <div class="top-box">
     <div class="top-title">Dashboard trading crypto</div>
     <div class="top-sub">
-        Source : <span class="yellow">CoinMarketCap</span> —
+        Sources : <span class="yellow">CoinMarketCap + Coinalyze</span> —
         Temporalité : <span class="yellow">{comparison_label}</span> —
         Mode : <span class="yellow">{mode}</span> —
         Stop : <span class="yellow">{stop_percent} %</span>
@@ -212,23 +202,22 @@ def info_card(title, value, extra=""):
 
 
 # =========================
-# COINMARKETCAP API
+# SECRETS
 # =========================
 
-def get_cmc_api_key():
+def get_secret(name):
     try:
-        return st.secrets["CMC_API_KEY"]
+        return st.secrets[name]
     except Exception:
         return None
 
 
+# =========================
+# API COINMARKETCAP
+# =========================
+
 @st.cache_data(ttl=60)
-def fetch_cmc_quotes(symbols):
-    api_key = get_cmc_api_key()
-
-    if not api_key:
-        raise Exception("Clé API CoinMarketCap absente. Ajoute CMC_API_KEY dans les secrets Streamlit.")
-
+def fetch_cmc_quotes(symbols_csv, api_key):
     url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
 
     headers = {
@@ -237,7 +226,7 @@ def fetch_cmc_quotes(symbols):
     }
 
     params = {
-        "symbol": ",".join(symbols),
+        "symbol": symbols_csv,
         "convert": "USD"
     }
 
@@ -264,6 +253,396 @@ def extract_first_coin(data, symbol):
 
     return item
 
+
+# =========================
+# API COINALYZE
+# =========================
+
+def coinalyze_get(endpoint, params, api_key):
+    base_url = "https://api.coinalyze.net/v1"
+    url = f"{base_url}/{endpoint}"
+
+    request_params = dict(params)
+    request_params["api_key"] = api_key
+
+    response = requests.get(url, params=request_params, timeout=20)
+
+    if response.status_code != 200:
+        raise Exception(f"Erreur Coinalyze {response.status_code}: {response.text}")
+
+    return response.json()
+
+
+@st.cache_data(ttl=600)
+def fetch_coinalyze_future_markets(api_key):
+    return coinalyze_get("future-markets", {}, api_key)
+
+
+@st.cache_data(ttl=60)
+def fetch_coinalyze_funding(symbols_csv, api_key):
+    if not symbols_csv:
+        return []
+
+    return coinalyze_get(
+        "funding-rate",
+        {"symbols": symbols_csv},
+        api_key
+    )
+
+
+@st.cache_data(ttl=60)
+def fetch_coinalyze_open_interest(symbols_csv, api_key):
+    if not symbols_csv:
+        return []
+
+    return coinalyze_get(
+        "open-interest",
+        {
+            "symbols": symbols_csv,
+            "convert_to_usd": "true"
+        },
+        api_key
+    )
+
+
+@st.cache_data(ttl=120)
+def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
+    if not symbols_csv:
+        return []
+
+    return coinalyze_get(
+        "open-interest-history",
+        {
+            "symbols": symbols_csv,
+            "interval": interval,
+            "from": from_ts,
+            "to": to_ts,
+            "convert_to_usd": "true"
+        },
+        api_key
+    )
+
+
+def get_oi_interval_and_range(comparison_label):
+    now = int(time.time())
+
+    if comparison_label == "1h":
+        return "1hour", now - 3 * 3600, now
+
+    if comparison_label == "24h":
+        return "1hour", now - 26 * 3600, now
+
+    return "daily", now - 9 * 24 * 3600, now
+
+
+def select_coinalyze_market(symbol, markets):
+    symbol = symbol.upper()
+
+    candidates = []
+
+    for market in markets:
+        base = str(market.get("base_asset", "")).upper()
+        quote = str(market.get("quote_asset", "")).upper()
+        is_perp = bool(market.get("is_perpetual", False))
+        margined = str(market.get("margined", "")).upper()
+
+        if base != symbol:
+            continue
+
+        if quote not in ["USDT", "USD"]:
+            continue
+
+        if not is_perp:
+            continue
+
+        if margined not in ["STABLE", "USD", "USDT"]:
+            continue
+
+        candidates.append(market)
+
+    if not candidates:
+        return None
+
+    def score_market(m):
+        exchange = str(m.get("exchange", "")).lower()
+        score = 0
+
+        if "binance" in exchange:
+            score += 100
+        elif "bybit" in exchange:
+            score += 80
+        elif "okx" in exchange:
+            score += 70
+        elif "bitget" in exchange:
+            score += 60
+
+        if m.get("has_long_short_ratio_data"):
+            score += 5
+
+        if m.get("has_ohlcv_data"):
+            score += 3
+
+        return score
+
+    candidates = sorted(candidates, key=score_market, reverse=True)
+    return candidates[0]
+
+
+def build_coinalyze_symbol_map(symbols, api_key):
+    try:
+        markets = fetch_coinalyze_future_markets(api_key)
+    except Exception:
+        markets = []
+
+    result = {}
+
+    for symbol in symbols:
+        market = select_coinalyze_market(symbol, markets)
+
+        if market is None:
+            result[symbol] = {
+                "coinalyze_symbol": None,
+                "exchange": "N/A"
+            }
+        else:
+            result[symbol] = {
+                "coinalyze_symbol": market.get("symbol"),
+                "exchange": market.get("exchange", "N/A")
+            }
+
+    return result
+
+
+def map_list_by_symbol(items):
+    result = {}
+
+    for item in items:
+        symbol = item.get("symbol")
+        if symbol:
+            result[symbol] = item
+
+    return result
+
+
+def get_oi_change_from_history(history_item):
+    if not history_item:
+        return "N/A"
+
+    history = history_item.get("history", [])
+
+    if not history or len(history) < 2:
+        return "N/A"
+
+    first = history[0].get("c")
+    last = history[-1].get("c")
+
+    try:
+        first = float(first)
+        last = float(last)
+
+        if first == 0:
+            return "N/A"
+
+        return round(((last / first) - 1) * 100, 2)
+
+    except Exception:
+        return "N/A"
+
+
+def classify_funding_bias(funding_value):
+    if funding_value == "N/A" or funding_value is None:
+        return "Neutre"
+
+    try:
+        value = float(funding_value)
+    except Exception:
+        return "Neutre"
+
+    if value > 0.03:
+        return "Haussier"
+
+    if value < -0.02:
+        return "Baissier"
+
+    return "Neutre"
+
+
+def classify_oi_bias(oi_change):
+    if oi_change == "N/A" or oi_change is None:
+        return "Neutre"
+
+    try:
+        value = float(oi_change)
+    except Exception:
+        return "Neutre"
+
+    if value > 5:
+        return "Haussier"
+
+    if value < -5:
+        return "Baissier"
+
+    return "Neutre"
+
+
+def calculate_futures_scores(funding_bias, oi_bias):
+    funding_long = 0
+    funding_short = 0
+    oi_score = 0
+
+    if funding_bias == "Haussier":
+        funding_long = 8
+        funding_short = 4
+    elif funding_bias == "Baissier":
+        funding_long = 4
+        funding_short = 8
+    else:
+        funding_long = 6
+        funding_short = 6
+
+    if oi_bias == "Haussier":
+        oi_score = 8
+    elif oi_bias == "Baissier":
+        oi_score = 3
+    else:
+        oi_score = 5
+
+    return funding_long + oi_score, funding_short + oi_score
+
+
+def get_futures_data_for_symbols(symbols, api_key):
+    if not api_key:
+        return {
+            symbol: {
+                "Coinalyze symbol": "N/A",
+                "Futures exchange": "N/A",
+                "Funding %": "N/A",
+                "Funding biais": "Neutre",
+                "Open Interest": "N/A",
+                "OI tendance": "Neutre",
+                "OI variation %": "N/A",
+                "Score Futures Long": 0,
+                "Score Futures Short": 0
+            }
+            for symbol in symbols
+        }
+
+    symbol_map = build_coinalyze_symbol_map(symbols, api_key)
+    coinalyze_symbols = [
+        data["coinalyze_symbol"]
+        for data in symbol_map.values()
+        if data["coinalyze_symbol"]
+    ]
+
+    if not coinalyze_symbols:
+        return {
+            symbol: {
+                "Coinalyze symbol": "N/A",
+                "Futures exchange": "N/A",
+                "Funding %": "N/A",
+                "Funding biais": "Neutre",
+                "Open Interest": "N/A",
+                "OI tendance": "Neutre",
+                "OI variation %": "N/A",
+                "Score Futures Long": 0,
+                "Score Futures Short": 0
+            }
+            for symbol in symbols
+        }
+
+    symbols_csv = ",".join(coinalyze_symbols)
+
+    try:
+        funding_data = fetch_coinalyze_funding(symbols_csv, api_key)
+    except Exception:
+        funding_data = []
+
+    try:
+        oi_data = fetch_coinalyze_open_interest(symbols_csv, api_key)
+    except Exception:
+        oi_data = []
+
+    interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
+
+    try:
+        oi_history = fetch_coinalyze_oi_history(
+            symbols_csv,
+            interval,
+            from_ts,
+            to_ts,
+            api_key
+        )
+    except Exception:
+        oi_history = []
+
+    funding_map = map_list_by_symbol(funding_data)
+    oi_map = map_list_by_symbol(oi_data)
+    oi_history_map = map_list_by_symbol(oi_history)
+
+    result = {}
+
+    for symbol in symbols:
+        cz_symbol = symbol_map[symbol]["coinalyze_symbol"]
+        exchange = symbol_map[symbol]["exchange"]
+
+        if not cz_symbol:
+            result[symbol] = {
+                "Coinalyze symbol": "N/A",
+                "Futures exchange": "N/A",
+                "Funding %": "N/A",
+                "Funding biais": "Neutre",
+                "Open Interest": "N/A",
+                "OI tendance": "Neutre",
+                "OI variation %": "N/A",
+                "Score Futures Long": 0,
+                "Score Futures Short": 0
+            }
+            continue
+
+        funding_item = funding_map.get(cz_symbol, {})
+        oi_item = oi_map.get(cz_symbol, {})
+        oi_history_item = oi_history_map.get(cz_symbol, {})
+
+        funding_value = funding_item.get("value", "N/A")
+        oi_value = oi_item.get("value", "N/A")
+        oi_change = get_oi_change_from_history(oi_history_item)
+
+        try:
+            funding_value_clean = round(float(funding_value), 4)
+        except Exception:
+            funding_value_clean = "N/A"
+
+        try:
+            oi_value_clean = round(float(oi_value), 2)
+        except Exception:
+            oi_value_clean = "N/A"
+
+        funding_bias = classify_funding_bias(funding_value_clean)
+        oi_bias = classify_oi_bias(oi_change)
+
+        futures_long, futures_short = calculate_futures_scores(
+            funding_bias,
+            oi_bias
+        )
+
+        result[symbol] = {
+            "Coinalyze symbol": cz_symbol,
+            "Futures exchange": exchange,
+            "Funding %": funding_value_clean,
+            "Funding biais": funding_bias,
+            "Open Interest": oi_value_clean,
+            "OI tendance": oi_bias,
+            "OI variation %": oi_change,
+            "Score Futures Long": futures_long,
+            "Score Futures Short": futures_short
+        }
+
+    return result
+
+
+# =========================
+# ANALYSE CMC
+# =========================
 
 def get_perf_from_quote(quote, comparison_label):
     if comparison_label == "1h":
@@ -364,19 +743,29 @@ def calculate_force_scores(force_vs_btc):
 
 def define_bias(score_long, score_short, mode):
     if mode == "Long uniquement":
-        if score_long >= 60:
+        if score_long >= 70:
+            return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
+        if score_long >= 55:
             return "Surveillance long", "Attendre confirmation long", "LONG"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
     if mode == "Short uniquement":
-        if score_short >= 60:
+        if score_short >= 70:
+            return "Short potentiel", "Chercher entrée rebond short", "SHORT"
+        if score_short >= 55:
             return "Surveillance short", "Attendre confirmation short", "SHORT"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
-    if score_long >= 60 and score_long >= score_short:
+    if score_long >= 70 and score_long > score_short:
+        return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
+
+    if score_short >= 70 and score_short > score_long:
+        return "Short potentiel", "Chercher entrée rebond short", "SHORT"
+
+    if score_long >= 55 and score_long >= score_short:
         return "Surveillance long", "Attendre confirmation long", "LONG"
 
-    if score_short >= 60 and score_short > score_long:
+    if score_short >= 55 and score_short > score_long:
         return "Surveillance short", "Attendre confirmation short", "SHORT"
 
     return "Pas prioritaire", "Rien à faire", "NONE"
@@ -423,12 +812,14 @@ def decision_reason(
     structure_pa,
     position_range,
     score_long,
-    score_short
+    score_short,
+    funding_bias,
+    oi_bias
 ):
     reasons = []
 
     if biais == "Pas prioritaire":
-        if score_long < 60 and score_short < 60:
+        if score_long < 55 and score_short < 55:
             reasons.append("Scores long/short trop faibles")
 
         if -2 <= force_vs_btc <= 2:
@@ -446,6 +837,12 @@ def decision_reason(
         if position_range == "Milieu de range":
             reasons.append("Prix sans excès directionnel")
 
+        if funding_bias == "Neutre":
+            reasons.append("Funding neutre")
+
+        if oi_bias == "Neutre":
+            reasons.append("OI neutre")
+
         if not reasons:
             reasons.append("Pas de confirmation suffisante")
 
@@ -460,6 +857,16 @@ def decision_reason(
         elif "Pression acheteuse" in structure_pa:
             reasons.append("Pression acheteuse")
 
+        if funding_bias == "Haussier":
+            reasons.append("Funding haussier")
+        elif funding_bias == "Baissier":
+            reasons.append("Funding baissier")
+
+        if oi_bias == "Haussier":
+            reasons.append("OI en hausse")
+        elif oi_bias == "Baissier":
+            reasons.append("OI en baisse")
+
         return " / ".join(reasons)
 
     if sens == "SHORT":
@@ -471,37 +878,50 @@ def decision_reason(
         elif "Pression vendeuse" in structure_pa:
             reasons.append("Pression vendeuse")
 
+        if funding_bias == "Haussier":
+            reasons.append("Funding haussier")
+        elif funding_bias == "Baissier":
+            reasons.append("Funding baissier")
+
+        if oi_bias == "Haussier":
+            reasons.append("OI en hausse")
+        elif oi_bias == "Baissier":
+            reasons.append("OI en baisse")
+
         return " / ".join(reasons)
 
     return "Pas de signal clair"
 
 
-def build_row(symbol, coin, btc_perf):
+def build_row(symbol, coin, btc_perf, futures_data):
     quote = coin["quote"]["USD"]
 
     price = quote.get("price", 0) or 0
     perf = get_perf_from_quote(quote, comparison_label)
-    btc_force = perf - btc_perf
+    force_vs_btc = perf - btc_perf
 
     volume_24h = quote.get("volume_24h", 0) or 0
     market_cap = quote.get("market_cap", 0) or 0
 
     structure, position_range, score_pa_long, score_pa_short = classify_structure(
         perf,
-        btc_force,
+        force_vs_btc,
         comparison_label
     )
 
     volume_score, volume_ratio = calculate_volume_score(volume_24h, market_cap)
 
     momentum_long, momentum_short = calculate_momentum_scores(perf)
-    force_long, force_short = calculate_force_scores(btc_force)
+    force_long, force_short = calculate_force_scores(force_vs_btc)
 
     score_long_spot = score_pa_long + momentum_long + volume_score
     score_short_spot = score_pa_short + momentum_short + volume_score
 
-    score_long_total = score_long_spot + force_long
-    score_short_total = score_short_spot + force_short
+    futures_long = futures_data.get("Score Futures Long", 0)
+    futures_short = futures_data.get("Score Futures Short", 0)
+
+    score_long_total = score_long_spot + force_long + futures_long
+    score_short_total = score_short_spot + force_short + futures_short
 
     biais, action, sens = define_bias(score_long_total, score_short_total, mode)
 
@@ -524,11 +944,13 @@ def build_row(symbol, coin, btc_perf):
     reason = decision_reason(
         biais,
         sens,
-        btc_force,
+        force_vs_btc,
         structure,
         position_range,
         score_long_total,
-        score_short_total
+        score_short_total,
+        futures_data.get("Funding biais", "Neutre"),
+        futures_data.get("OI tendance", "Neutre")
     )
 
     row = {
@@ -536,7 +958,7 @@ def build_row(symbol, coin, btc_perf):
         "Nom": coin.get("name", symbol),
         "Prix": round(price, 6),
         f"Perf {comparison_label}": round(perf, 2),
-        f"Force vs BTC {comparison_label}": round(btc_force, 2),
+        f"Force vs BTC {comparison_label}": round(force_vs_btc, 2),
         "Structure PA": structure,
         "Position Range": position_range,
         "Volume / Market Cap %": volume_ratio,
@@ -549,24 +971,24 @@ def build_row(symbol, coin, btc_perf):
         "Score Force Short": force_short,
         "Score Long Spot": score_long_spot,
         "Score Short Spot": score_short_spot,
+        "Score Futures Long": futures_long,
+        "Score Futures Short": futures_short,
         "Score Long Total": score_long_total,
         "Score Short Total": score_short_total,
         "Priority Score": max(score_long_total, score_short_total),
-        "Funding biais": "N/A",
-        "OI tendance": "N/A",
-        "Funding %": "N/A",
-        "Open Interest": "N/A",
-        "OI variation %": "N/A",
         "Biais": biais,
         "Raison décision": reason,
         "Action": action,
         "Distance stop %": stop_percent,
+        "Market Cap": round(market_cap, 2) if market_cap else "N/A",
+        "Volume 24h": round(volume_24h, 2) if volume_24h else "N/A",
         "High période": "N/A",
         "Low période": "N/A",
         "High précédent": "N/A",
         "Low précédent": "N/A",
     }
 
+    row.update(futures_data)
     row.update(plan)
 
     return row
@@ -577,6 +999,16 @@ def build_row(symbol, coin, btc_perf):
 # =========================
 
 if scan_button:
+    cmc_api_key = get_secret("CMC_API_KEY")
+    coinalyze_api_key = get_secret("COINALYZE_API_KEY")
+
+    if not cmc_api_key:
+        st.error("Clé API CoinMarketCap absente. Ajoute CMC_API_KEY dans les secrets Streamlit.")
+        st.stop()
+
+    if not coinalyze_api_key:
+        st.warning("Clé API Coinalyze absente. L'app continue sans funding/open interest.")
+
     symbols = [c.strip().upper() for c in watchlist.split(",") if c.strip()]
     symbols = symbols[:max_tokens]
 
@@ -589,7 +1021,7 @@ if scan_button:
     errors = []
 
     try:
-        cmc_data = fetch_cmc_quotes(request_symbols)
+        cmc_data = fetch_cmc_quotes(",".join(request_symbols), cmc_api_key)
 
         btc_coin = extract_first_coin(cmc_data, "BTC")
         if btc_coin is None:
@@ -597,6 +1029,8 @@ if scan_button:
 
         btc_quote = btc_coin["quote"]["USD"]
         btc_perf = get_perf_from_quote(btc_quote, comparison_label)
+
+        futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
 
         for symbol in symbols:
             try:
@@ -606,7 +1040,8 @@ if scan_button:
                     errors.append(f"{symbol}: non trouvé sur CoinMarketCap")
                     continue
 
-                rows.append(build_row(symbol, coin, btc_perf))
+                futures_data = futures_map.get(symbol, {})
+                rows.append(build_row(symbol, coin, btc_perf, futures_data))
 
             except Exception as e:
                 errors.append(f"{symbol}: {e}")
@@ -628,6 +1063,8 @@ if scan_button:
             force_column_name,
             "Structure PA",
             "Position Range",
+            "Funding biais",
+            "OI tendance",
             "Score Long Total",
             "Score Short Total",
             "Biais",
@@ -642,7 +1079,7 @@ if scan_button:
 
         df_light = df[visible_columns]
 
-        st.subheader("Classement CoinMarketCap")
+        st.subheader("Classement CoinMarketCap + Coinalyze")
         st.dataframe(df_light, use_container_width=True)
 
         best = df.iloc[0]
@@ -656,8 +1093,8 @@ if scan_button:
             st.metric("Sens", best["Sens"])
 
         with col2:
-            st.metric("Score Long", f"{best['Score Long Total']}/79")
-            st.metric("Score Short", f"{best['Score Short Total']}/79")
+            st.metric("Score Long", f"{best['Score Long Total']}/95")
+            st.metric("Score Short", f"{best['Score Short Total']}/95")
 
         with col3:
             st.metric("Perf", f"{best[perf_column_name]} %")
@@ -717,9 +1154,9 @@ if scan_button:
 
         with exp3:
             info_card(
-                "3. Volume",
-                f"{best['Volume / Market Cap %']} %",
-                "Volume 24h comparé au market cap."
+                "3. Futures",
+                f"Funding {best['Funding biais']} / OI {best['OI tendance']}",
+                f"OI variation : {best['OI variation %']} %."
             )
 
         with exp4:
@@ -760,19 +1197,19 @@ if scan_button:
                 info_card("Score Force", f"L {best['Score Force Long']} / S {best['Score Force Short']}", "Force relative BTC.")
 
             with tech4:
-                info_card("Futures", "N/A", "Non disponible dans cette version CMC.")
-                info_card("Funding / OI", "N/A", "À ajouter plus tard via Coinglass/Coinalyze.")
+                info_card("Score Futures", f"L {best['Score Futures Long']} / S {best['Score Futures Short']}", "Funding + OI.")
+                info_card("Funding / OI", f"{best['Funding biais']} / {best['OI tendance']}", f"OI variation : {best['OI variation %']} %")
                 info_card("Score final", f"L {best['Score Long Total']} / S {best['Score Short Total']}", "Scores finaux.")
 
             tech5, tech6, tech7, tech8 = st.columns(4)
 
             with tech5:
-                info_card("Market Cap", round(best.get("Market Cap", 0), 2) if "Market Cap" in best else "N/A", "Capitalisation.")
-                info_card("Source", "CoinMarketCap", "Données cloud compatible.")
+                info_card("Market Cap", best["Market Cap"], "Capitalisation.")
+                info_card("Volume 24h", best["Volume 24h"], "Volume spot global.")
 
             with tech6:
-                info_card("Funding brut", "N/A", "Non utilisé.")
-                info_card("Open Interest brut", "N/A", "Non utilisé.")
+                info_card("Funding brut", f"{best['Funding %']} %", f"Biais : {best['Funding biais']}")
+                info_card("Open Interest brut", best["Open Interest"], f"Exchange : {best['Futures exchange']}")
 
             with tech7:
                 info_card("Entrée", best["Entrée"], f"Sens : {best['Sens']}")
@@ -783,7 +1220,8 @@ if scan_button:
                 info_card("Cible range", best["Cible range"], "Objectif indicatif.")
 
         st.caption(
-            "Version CoinMarketCap : stable sur Streamlit Cloud, mais sans chandeliers Binance ni funding/open interest."
+            "Prix/perf/volume : CoinMarketCap. Funding/open interest : Coinalyze. "
+            "Si un token n'a pas de marché futures reconnu par Coinalyze, l'app continue avec les données spot."
         )
 
     if errors:
@@ -797,7 +1235,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
         <div class="small-text">
-            Cette version utilise CoinMarketCap pour éviter le blocage Binance sur Streamlit Cloud.
+            Cette version utilise CoinMarketCap + Coinalyze pour éviter le blocage Binance sur Streamlit Cloud.
         </div>
     </div>
     """, unsafe_allow_html=True)
