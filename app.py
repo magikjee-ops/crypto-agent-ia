@@ -337,7 +337,6 @@ def get_oi_interval_and_range(comparison_label):
 
 def select_coinalyze_market(symbol, markets):
     symbol = symbol.upper()
-
     candidates = []
 
     for market in markets:
@@ -641,7 +640,7 @@ def get_futures_data_for_symbols(symbols, api_key):
 
 
 # =========================
-# ANALYSE CMC
+# ANALYSE
 # =========================
 
 def get_perf_from_quote(quote, comparison_label):
@@ -741,31 +740,102 @@ def calculate_force_scores(force_vs_btc):
     return force_score_long, force_score_short
 
 
+def calculate_trend_scores(quote, force_vs_btc, funding_bias, oi_bias):
+    perf_1h = quote.get("percent_change_1h", 0) or 0
+    perf_24h = quote.get("percent_change_24h", 0) or 0
+    perf_7d = quote.get("percent_change_7d", 0) or 0
+
+    trend_long = 0
+    trend_short = 0
+    trend_notes = []
+
+    # Tendance haussière propre
+    if perf_7d > 0:
+        trend_long += 7
+        trend_notes.append("7j positif")
+
+    if perf_24h > 0:
+        trend_long += 5
+        trend_notes.append("24h positif")
+
+    if perf_1h > -1:
+        trend_long += 3
+        trend_notes.append("1h stable")
+
+    if force_vs_btc > 0:
+        trend_long += 5
+        trend_notes.append("force vs BTC positive")
+    elif force_vs_btc > -2:
+        trend_long += 3
+        trend_notes.append("force vs BTC correcte")
+
+    if oi_bias == "Haussier":
+        trend_long += 3
+        trend_notes.append("OI haussier")
+
+    if funding_bias in ["Neutre", "Haussier"]:
+        trend_long += 2
+
+    # Tendance baissière propre
+    if perf_7d < 0:
+        trend_short += 7
+
+    if perf_24h < 0:
+        trend_short += 5
+
+    if perf_1h < 1:
+        trend_short += 3
+
+    if force_vs_btc < 0:
+        trend_short += 5
+    elif force_vs_btc < 2:
+        trend_short += 3
+
+    if oi_bias == "Haussier":
+        trend_short += 3
+
+    if funding_bias in ["Neutre", "Baissier"]:
+        trend_short += 2
+
+    if trend_long >= 18 and trend_long > trend_short:
+        trend_profile = "Tendance haussière propre"
+    elif trend_short >= 18 and trend_short > trend_long:
+        trend_profile = "Tendance baissière propre"
+    elif trend_long >= 14 and trend_long >= trend_short:
+        trend_profile = "Biais haussier en construction"
+    elif trend_short >= 14 and trend_short > trend_long:
+        trend_profile = "Biais baissier en construction"
+    else:
+        trend_profile = "Tendance peu claire"
+
+    return trend_long, trend_short, trend_profile, " / ".join(trend_notes)
+
+
 def define_bias(score_long, score_short, mode):
     if mode == "Long uniquement":
-        if score_long >= 70:
+        if score_long >= 85:
             return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
-        if score_long >= 55:
+        if score_long >= 65:
             return "Surveillance long", "Attendre confirmation long", "LONG"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
     if mode == "Short uniquement":
-        if score_short >= 70:
+        if score_short >= 85:
             return "Short potentiel", "Chercher entrée rebond short", "SHORT"
-        if score_short >= 55:
+        if score_short >= 65:
             return "Surveillance short", "Attendre confirmation short", "SHORT"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
-    if score_long >= 70 and score_long > score_short:
+    if score_long >= 85 and score_long > score_short:
         return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
 
-    if score_short >= 70 and score_short > score_long:
+    if score_short >= 85 and score_short > score_long:
         return "Short potentiel", "Chercher entrée rebond short", "SHORT"
 
-    if score_long >= 55 and score_long >= score_short:
+    if score_long >= 65 and score_long >= score_short:
         return "Surveillance long", "Attendre confirmation long", "LONG"
 
-    if score_short >= 55 and score_short > score_long:
+    if score_short >= 65 and score_short > score_long:
         return "Surveillance short", "Attendre confirmation short", "SHORT"
 
     return "Pas prioritaire", "Rien à faire", "NONE"
@@ -814,12 +884,13 @@ def decision_reason(
     score_long,
     score_short,
     funding_bias,
-    oi_bias
+    oi_bias,
+    trend_profile
 ):
     reasons = []
 
     if biais == "Pas prioritaire":
-        if score_long < 55 and score_short < 55:
+        if score_long < 65 and score_short < 65:
             reasons.append("Scores long/short trop faibles")
 
         if -2 <= force_vs_btc <= 2:
@@ -837,6 +908,9 @@ def decision_reason(
         if position_range == "Milieu de range":
             reasons.append("Prix sans excès directionnel")
 
+        if trend_profile in ["Tendance haussière propre", "Biais haussier en construction"]:
+            reasons.append(trend_profile)
+
         if funding_bias == "Neutre":
             reasons.append("Funding neutre")
 
@@ -851,6 +925,9 @@ def decision_reason(
     if sens == "LONG":
         reasons.append("Setup long détecté")
         reasons.append("Surperformance vs BTC" if force_vs_btc > 0 else "Force BTC faible")
+
+        if trend_profile in ["Tendance haussière propre", "Biais haussier en construction"]:
+            reasons.append(trend_profile)
 
         if "Momentum haussier" in structure_pa:
             reasons.append("Momentum haussier")
@@ -872,6 +949,9 @@ def decision_reason(
     if sens == "SHORT":
         reasons.append("Setup short détecté")
         reasons.append("Faiblesse vs BTC" if force_vs_btc < 0 else "Short malgré force relative")
+
+        if trend_profile in ["Tendance baissière propre", "Biais baissier en construction"]:
+            reasons.append(trend_profile)
 
         if "Momentum baissier" in structure_pa:
             reasons.append("Momentum baissier")
@@ -920,14 +1000,32 @@ def build_row(symbol, coin, btc_perf, futures_data):
     futures_long = futures_data.get("Score Futures Long", 0)
     futures_short = futures_data.get("Score Futures Short", 0)
 
-    score_long_total = score_long_spot + force_long + futures_long
-    score_short_total = score_short_spot + force_short + futures_short
+    trend_long, trend_short, trend_profile, trend_notes = calculate_trend_scores(
+        quote,
+        force_vs_btc,
+        futures_data.get("Funding biais", "Neutre"),
+        futures_data.get("OI tendance", "Neutre")
+    )
+
+    score_long_total = score_long_spot + force_long + futures_long + trend_long
+    score_short_total = score_short_spot + force_short + futures_short + trend_short
 
     biais, action, sens = define_bias(score_long_total, score_short_total, mode)
 
-    if sens == "LONG":
+    # Plan toujours affiché, même si le token est "Pas prioritaire".
+    if sens == "NONE":
+        if mode == "Long uniquement":
+            sens_plan = "LONG"
+        elif mode == "Short uniquement":
+            sens_plan = "SHORT"
+        else:
+            sens_plan = "LONG" if score_long_total >= score_short_total else "SHORT"
+    else:
+        sens_plan = sens
+
+    if sens_plan == "LONG":
         plan = trade_plan_long(price, stop_percent)
-    elif sens == "SHORT":
+    elif sens_plan == "SHORT":
         plan = trade_plan_short(price, stop_percent)
     else:
         plan = {
@@ -941,6 +1039,9 @@ def build_row(symbol, coin, btc_perf, futures_data):
             "R/R TP2": "N/A"
         }
 
+    if sens == "NONE":
+        plan["Sens"] = f"{sens_plan} indicatif"
+
     reason = decision_reason(
         biais,
         sens,
@@ -950,7 +1051,8 @@ def build_row(symbol, coin, btc_perf, futures_data):
         score_long_total,
         score_short_total,
         futures_data.get("Funding biais", "Neutre"),
-        futures_data.get("OI tendance", "Neutre")
+        futures_data.get("OI tendance", "Neutre"),
+        trend_profile
     )
 
     row = {
@@ -961,6 +1063,8 @@ def build_row(symbol, coin, btc_perf, futures_data):
         f"Force vs BTC {comparison_label}": round(force_vs_btc, 2),
         "Structure PA": structure,
         "Position Range": position_range,
+        "Profil tendance": trend_profile,
+        "Notes tendance": trend_notes,
         "Volume / Market Cap %": volume_ratio,
         "Score PA Long": score_pa_long,
         "Score PA Short": score_pa_short,
@@ -973,6 +1077,8 @@ def build_row(symbol, coin, btc_perf, futures_data):
         "Score Short Spot": score_short_spot,
         "Score Futures Long": futures_long,
         "Score Futures Short": futures_short,
+        "Score Tendance Long": trend_long,
+        "Score Tendance Short": trend_short,
         "Score Long Total": score_long_total,
         "Score Short Total": score_short_total,
         "Priority Score": max(score_long_total, score_short_total),
@@ -1063,6 +1169,7 @@ if scan_button:
             force_column_name,
             "Structure PA",
             "Position Range",
+            "Profil tendance",
             "Funding biais",
             "OI tendance",
             "Score Long Total",
@@ -1093,8 +1200,8 @@ if scan_button:
             st.metric("Sens", best["Sens"])
 
         with col2:
-            st.metric("Score Long", f"{best['Score Long Total']}/95")
-            st.metric("Score Short", f"{best['Score Short Total']}/95")
+            st.metric("Score Long", f"{best['Score Long Total']}/120")
+            st.metric("Score Short", f"{best['Score Short Total']}/120")
 
         with col3:
             st.metric("Perf", f"{best[perf_column_name]} %")
@@ -1102,7 +1209,7 @@ if scan_button:
 
         with col4:
             st.metric("Structure", best["Structure PA"])
-            st.metric("Range", best["Position Range"])
+            st.metric("Tendance", best["Profil tendance"])
 
         with col5:
             st.metric("Funding", best["Funding biais"])
@@ -1147,9 +1254,9 @@ if scan_button:
 
         with exp2:
             info_card(
-                "2. Momentum",
-                best["Structure PA"],
-                f"Position actuelle : {best['Position Range']}."
+                "2. Tendance",
+                best["Profil tendance"],
+                best["Notes tendance"]
             )
 
         with exp3:
@@ -1188,12 +1295,12 @@ if scan_button:
 
             with tech2:
                 info_card("Structure", best["Structure PA"], "Lecture momentum.")
-                info_card("Position", best["Position Range"], "Zone actuelle du prix.")
+                info_card("Profil tendance", best["Profil tendance"], best["Notes tendance"])
                 info_card("Volume / Market Cap", f"{best['Volume / Market Cap %']} %", "Activité relative du marché.")
 
             with tech3:
                 info_card("Score Long Spot", best["Score Long Spot"], "Momentum + volume.")
-                info_card("Score Short Spot", best["Score Short Spot"], "Momentum + volume.")
+                info_card("Score Tendance", f"L {best['Score Tendance Long']} / S {best['Score Tendance Short']}", "Tendance propre.")
                 info_card("Score Force", f"L {best['Score Force Long']} / S {best['Score Force Short']}", "Force relative BTC.")
 
             with tech4:
@@ -1221,7 +1328,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Funding/open interest : Coinalyze. "
-            "Si un token n'a pas de marché futures reconnu par Coinalyze, l'app continue avec les données spot."
+            "Le Score Tendance permet de mieux détecter les tokens en construction haussière ou baissière."
         )
 
     if errors:
@@ -1235,7 +1342,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
         <div class="small-text">
-            Cette version utilise CoinMarketCap + Coinalyze pour éviter le blocage Binance sur Streamlit Cloud.
+            Cette version utilise CoinMarketCap + Coinalyze avec un score tendance pour ne pas favoriser uniquement les pumps rapides.
         </div>
     </div>
     """, unsafe_allow_html=True)
