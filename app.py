@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Crypto Agent IA", layout="wide")
+st.set_page_config(page_title="Crypto Agent IA V7", layout="wide")
 
 # =========================
 # STYLE
@@ -24,7 +24,6 @@ h1, h2, h3 {
 }
 .block-container {
     padding-top: 1.5rem;
-    padding-bottom: 2rem;
 }
 div[data-testid="stMetric"] {
     background-color: #181A20;
@@ -44,7 +43,7 @@ div[data-testid="stMetricValue"] {
     border: 1px solid #2B3139;
     border-radius: 12px;
     padding: 16px;
-    min-height: 115px;
+    min-height: 110px;
     margin-bottom: 12px;
 }
 .binance-card-title {
@@ -54,7 +53,7 @@ div[data-testid="stMetricValue"] {
 }
 .binance-card-value {
     color: #EAECEF;
-    font-size: 1.05rem;
+    font-size: 1rem;
     font-weight: 600;
 }
 .yellow {
@@ -79,10 +78,6 @@ div[data-testid="stMetricValue"] {
     color: #0B0E11;
     border: none;
 }
-div[data-testid="stDataFrame"] {
-    background-color: #181A20;
-    border-radius: 12px;
-}
 .top-box {
     background-color: #181A20;
     border: 1px solid #2B3139;
@@ -102,11 +97,12 @@ div[data-testid="stDataFrame"] {
 </style>
 """, unsafe_allow_html=True)
 
+
 # =========================
 # SIDEBAR
 # =========================
 
-st.sidebar.title("Paramètres")
+st.sidebar.title("Paramètres V7")
 
 default_watchlist = (
     "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
@@ -117,7 +113,7 @@ with st.sidebar.expander("Watchlist", expanded=False):
     watchlist = st.text_area("Panier de cryptos", default_watchlist, height=180)
 
 comparison_label = st.sidebar.selectbox(
-    "Temporalité d'analyse",
+    "Temporalité principale",
     ["1h", "4h", "12h", "1 jour", "7 jours", "30 jours"]
 )
 
@@ -127,7 +123,7 @@ mode = st.sidebar.selectbox(
 )
 
 stop_percent = st.sidebar.slider(
-    "Distance du stop depuis l'entrée (%)",
+    "Distance stop / invalidation (%)",
     0.25,
     5.0,
     1.0,
@@ -150,30 +146,32 @@ use_futures_confirm = st.sidebar.checkbox(
 scan_button = st.sidebar.button("Scanner maintenant")
 
 if use_futures_confirm:
-    st.sidebar.caption("Mode complet : bougies + OI + funding. Plus lourd pour Coinalyze.")
+    st.sidebar.caption("Mode complet : PA + OI + Funding. Plus lourd pour Coinalyze.")
 else:
-    st.sidebar.caption("Mode stable : bougies / PA réelle uniquement. OI + funding désactivés pour éviter les erreurs 429.")
+    st.sidebar.caption("Mode stable : PA réelle uniquement. OI + Funding désactivés.")
+
 
 # =========================
 # HEADER
 # =========================
 
-st.title("Crypto Agent IA — Scanner PA + OI + Funding")
+st.title("Crypto Agent IA V7 — Agent Setup Trading")
 
 futures_status = "activés" if use_futures_confirm else "désactivés"
 
 st.markdown(f"""
 <div class="top-box">
-    <div class="top-title">Dashboard trading crypto</div>
+    <div class="top-title">Scanner de setups — logique agent IA</div>
     <div class="top-sub">
-        Sources : <span class="yellow">CoinMarketCap + Coinalyze</span> —
-        Temporalité : <span class="yellow">{comparison_label}</span> —
+        Critères : <span class="yellow">structure 1h/4h/1j, force BTC, volume, momentum, tradabilité, risque, invalidation</span><br>
+        Temporalité principale : <span class="yellow">{comparison_label}</span> —
         Mode : <span class="yellow">{mode}</span> —
         Stop : <span class="yellow">{stop_percent} %</span> —
         OI/Funding : <span class="yellow">{futures_status}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # =========================
 # AFFICHAGE
@@ -343,7 +341,7 @@ def rounded_now():
 def get_pa_interval_and_range(comparison_label):
     now = rounded_now()
 
-    # On force tout en 15min, car c'est l'intervalle qui fonctionne sur ton app.
+    # Toutes les bougies en 15min, car c'est ce qui fonctionne sur ton app.
     if comparison_label == "1h":
         return "15min", now - 24 * 3600, now
 
@@ -368,16 +366,7 @@ def get_pa_interval_and_range(comparison_label):
 def get_oi_interval_and_range(comparison_label):
     now = rounded_now()
 
-    if comparison_label == "1h":
-        return "1hour", now - 3 * 3600, now
-
-    if comparison_label == "4h":
-        return "1hour", now - 8 * 3600, now
-
-    if comparison_label == "12h":
-        return "1hour", now - 18 * 3600, now
-
-    if comparison_label == "1 jour":
+    if comparison_label in ["1h", "4h", "12h", "1 jour"]:
         return "1hour", now - 30 * 3600, now
 
     if comparison_label == "7 jours":
@@ -438,8 +427,6 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
     st.session_state["debug_ohlcv_to"] = to_ts
 
     all_data = []
-
-    # Requêtes par paquets de 5 pour éviter les erreurs 429.
     chunk_size = 5
     total_chunks = (len(coinalyze_symbols) + chunk_size - 1) // chunk_size
 
@@ -471,8 +458,6 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
             st.session_state["debug_ohlcv_error"] = str(e)
 
         progress_bar.progress(chunk_number / total_chunks)
-
-        # Pause volontaire pour ne pas spammer Coinalyze.
         time.sleep(1.2)
 
     status_text.success("Bougies Coinalyze récupérées par paquets de 5.")
@@ -582,34 +567,14 @@ def build_coinalyze_symbol_map(symbols, api_key):
 
 
 # =========================
-# PRICE ACTION RÉELLE
+# OHLCV / STRUCTURE
 # =========================
 
-def empty_pa_data():
-    return {
-        "PA réelle": "N/A",
-        "Tendance bougies": "N/A",
-        "Dernière bougie": "N/A",
-        "Breakout réel": "N/A",
-        "Position range réel %": "N/A",
-        "Score PA Réel Long": 0,
-        "Score PA Réel Short": 0,
-        "High PA": "N/A",
-        "Low PA": "N/A"
-    }
-
-
-def analyze_real_price_action(ohlcv_item):
+def candles_from_ohlcv_item(ohlcv_item):
     if not ohlcv_item:
-        return empty_pa_data()
+        return []
 
     history = ohlcv_item.get("history", [])
-
-    if not history or len(history) < 8:
-        data = empty_pa_data()
-        data["PA réelle"] = "Données insuffisantes"
-        return data
-
     candles = []
 
     for c in history:
@@ -618,11 +583,13 @@ def analyze_real_price_action(ohlcv_item):
         l = safe_float(c.get("l"))
         close = safe_float(c.get("c"))
         v = safe_float(c.get("v"))
+        t = c.get("t")
 
         if o is None or h is None or l is None or close is None:
             continue
 
         candles.append({
+            "t": t,
             "o": o,
             "h": h,
             "l": l,
@@ -630,10 +597,40 @@ def analyze_real_price_action(ohlcv_item):
             "v": v if v is not None else 0
         })
 
-    if len(candles) < 8:
-        data = empty_pa_data()
-        data["PA réelle"] = "Données insuffisantes"
-        return data
+    return candles
+
+
+def select_last_hours(candles, hours):
+    if not candles:
+        return []
+
+    now = int(time.time())
+    min_ts = now - hours * 3600
+
+    timed = [c for c in candles if c.get("t") is not None]
+
+    if timed:
+        selected = [c for c in timed if int(c["t"]) >= min_ts]
+        if len(selected) >= 8:
+            return selected
+
+    approx_count = max(8, int(hours * 4))
+    return candles[-approx_count:]
+
+
+def analyze_structure(candles, label):
+    if not candles or len(candles) < 8:
+        return {
+            "label": label,
+            "structure": "N/A",
+            "score_long": 0,
+            "score_short": 0,
+            "range_position": "N/A",
+            "last_candle": "N/A",
+            "breakout": "N/A",
+            "advanced": False,
+            "compression": False
+        }
 
     last = candles[-1]
     previous = candles[:-1]
@@ -645,9 +642,6 @@ def analyze_real_price_action(ohlcv_item):
     high_range = max(highs)
     low_range = min(lows)
     close = last["c"]
-
-    previous_high = max([x["h"] for x in previous[-8:]])
-    previous_low = min([x["l"] for x in previous[-8:]])
 
     first_half = candles[:len(candles)//2]
     second_half = candles[len(candles)//2:]
@@ -662,43 +656,56 @@ def analyze_real_price_action(ohlcv_item):
     score_short = 0
 
     if second_high > first_high and second_low > first_low:
-        trend = "HH/HL haussier"
-        score_long += 18
+        structure = "Haussière HH/HL"
+        score_long += 25
     elif second_high < first_high and second_low < first_low:
-        trend = "LH/LL baissier"
-        score_short += 18
+        structure = "Baissière LH/LL"
+        score_short += 25
     elif second_high > first_high and second_low < first_low:
-        trend = "Range élargi"
-        score_long += 5
-        score_short += 5
+        structure = "Range élargi"
+        score_long += 7
+        score_short += 7
     else:
-        trend = "Range / compression"
-        score_long += 4
-        score_short += 4
+        structure = "Compression / range"
+        score_long += 10
+        score_short += 10
+
+    previous_high = max([x["h"] for x in previous[-8:]])
+    previous_low = min([x["l"] for x in previous[-8:]])
 
     if close > previous_high * 1.002:
-        breakout = "Breakout réel"
-        score_long += 18
+        breakout = "Breakout"
+        score_long += 20
     elif close < previous_low * 0.998:
-        breakout = "Breakdown réel"
-        score_short += 18
+        breakout = "Breakdown"
+        score_short += 20
     else:
         breakout = "Pas de cassure"
 
     if high_range != low_range:
-        range_position = ((close - low_range) / (high_range - low_range)) * 100
-        range_position = round(range_position, 2)
+        range_position = round(((close - low_range) / (high_range - low_range)) * 100, 2)
     else:
         range_position = "N/A"
 
     if range_position != "N/A":
-        if range_position > 75:
-            score_long += 8
-        elif range_position < 25:
-            score_short += 8
+        if range_position > 85:
+            score_long += 5
+            advanced = True
+        elif range_position > 65:
+            score_long += 10
+            advanced = False
+        elif range_position < 15:
+            score_short += 5
+            advanced = True
+        elif range_position < 35:
+            score_short += 10
+            advanced = False
         else:
-            score_long += 3
-            score_short += 3
+            score_long += 5
+            score_short += 5
+            advanced = False
+    else:
+        advanced = False
 
     body = abs(last["c"] - last["o"])
     candle_range = last["h"] - last["l"]
@@ -709,16 +716,16 @@ def analyze_real_price_action(ohlcv_item):
         body_ratio = 0
 
     if last["c"] > last["o"] and body_ratio > 0.55:
-        last_candle = "Bougie impulsive verte"
+        last_candle = "Impulsion verte"
         score_long += 10
     elif last["c"] < last["o"] and body_ratio > 0.55:
-        last_candle = "Bougie impulsive rouge"
+        last_candle = "Impulsion rouge"
         score_short += 10
     elif last["c"] > last["o"]:
-        last_candle = "Bougie verte modérée"
+        last_candle = "Verte modérée"
         score_long += 5
     elif last["c"] < last["o"]:
-        last_candle = "Bougie rouge modérée"
+        last_candle = "Rouge modérée"
         score_short += 5
     else:
         last_candle = "Doji / neutre"
@@ -733,28 +740,34 @@ def analyze_real_price_action(ohlcv_item):
             elif last["c"] < last["o"]:
                 score_short += 8
 
-    if score_long >= 38 and score_long > score_short:
-        pa_profile = "PA haussière forte"
-    elif score_short >= 38 and score_short > score_long:
-        pa_profile = "PA baissière forte"
-    elif score_long >= 25 and score_long >= score_short:
-        pa_profile = "PA haussière en construction"
-    elif score_short >= 25 and score_short > score_long:
-        pa_profile = "PA baissière en construction"
-    else:
-        pa_profile = "PA neutre"
+    recent_range = max([x["h"] for x in candles[-8:]]) - min([x["l"] for x in candles[-8:]])
+    global_range = high_range - low_range
+
+    compression = False
+    if global_range > 0 and recent_range / global_range < 0.35:
+        compression = True
 
     return {
-        "PA réelle": pa_profile,
-        "Tendance bougies": trend,
-        "Dernière bougie": last_candle,
-        "Breakout réel": breakout,
-        "Position range réel %": range_position,
-        "Score PA Réel Long": score_long,
-        "Score PA Réel Short": score_short,
-        "High PA": round(high_range, 6),
-        "Low PA": round(low_range, 6)
+        "label": label,
+        "structure": structure,
+        "score_long": score_long,
+        "score_short": score_short,
+        "range_position": range_position,
+        "last_candle": last_candle,
+        "breakout": breakout,
+        "advanced": advanced,
+        "compression": compression
     }
+
+
+def analyze_multi_tf(ohlcv_item):
+    candles = candles_from_ohlcv_item(ohlcv_item)
+
+    tf_1h = analyze_structure(select_last_hours(candles, 1), "1h")
+    tf_4h = analyze_structure(select_last_hours(candles, 4), "4h")
+    tf_1d = analyze_structure(select_last_hours(candles, 24), "1j")
+
+    return tf_1h, tf_4h, tf_1d, candles
 
 
 # =========================
@@ -796,10 +809,9 @@ def classify_funding_bias(funding_value):
         return "Neutre"
 
     if value > 0.03:
-        return "Haussier"
-
+        return "Long crowded"
     if value < -0.02:
-        return "Baissier"
+        return "Short crowded"
 
     return "Neutre"
 
@@ -814,37 +826,15 @@ def classify_oi_bias(oi_change):
         return "Neutre"
 
     if value > 5:
-        return "Haussier"
-
+        return "OI en hausse"
     if value < -5:
-        return "Baissier"
+        return "OI en baisse"
 
     return "Neutre"
 
 
-def calculate_futures_scores(funding_bias, oi_bias):
-    if funding_bias == "Haussier":
-        funding_long = 8
-        funding_short = 4
-    elif funding_bias == "Baissier":
-        funding_long = 4
-        funding_short = 8
-    else:
-        funding_long = 6
-        funding_short = 6
-
-    if oi_bias == "Haussier":
-        oi_score = 8
-    elif oi_bias == "Baissier":
-        oi_score = 3
-    else:
-        oi_score = 5
-
-    return funding_long + oi_score, funding_short + oi_score
-
-
-def get_fallback_futures_data():
-    data = {
+def get_fallback_market_data():
+    return {
         "Coinalyze symbol": "N/A",
         "Futures exchange": "N/A",
         "Funding %": "N/A",
@@ -852,17 +842,13 @@ def get_fallback_futures_data():
         "Open Interest": "N/A",
         "OI tendance": "Neutre",
         "OI variation %": "N/A",
-        "Score Futures Long": 0,
-        "Score Futures Short": 0
+        "OHLCV item": {}
     }
 
-    data.update(empty_pa_data())
-    return data
 
-
-def get_futures_data_for_symbols(symbols, api_key):
+def get_market_data_for_symbols(symbols, api_key):
     if not api_key:
-        return {symbol: get_fallback_futures_data() for symbol in symbols}
+        return {symbol: get_fallback_market_data() for symbol in symbols}
 
     symbol_map = build_coinalyze_symbol_map(symbols, api_key)
 
@@ -875,7 +861,7 @@ def get_futures_data_for_symbols(symbols, api_key):
     st.session_state["debug_coinalyze_symbols_used"] = coinalyze_symbols
 
     if not coinalyze_symbols:
-        return {symbol: get_fallback_futures_data() for symbol in symbols}
+        return {symbol: get_fallback_market_data() for symbol in symbols}
 
     symbols_csv = ",".join(coinalyze_symbols)
 
@@ -937,15 +923,13 @@ def get_futures_data_for_symbols(symbols, api_key):
         exchange = symbol_map[symbol]["exchange"]
 
         if not cz_symbol:
-            result[symbol] = get_fallback_futures_data()
+            result[symbol] = get_fallback_market_data()
             continue
 
         funding_item = funding_map.get(cz_symbol, {})
         oi_item = oi_map.get(cz_symbol, {})
         oi_history_item = oi_history_map.get(cz_symbol, {})
         ohlcv_item = ohlcv_history_map.get(cz_symbol, {})
-
-        pa_real_data = analyze_real_price_action(ohlcv_item)
 
         funding_value = funding_item.get("value", "N/A")
         oi_value = oi_item.get("value", "N/A")
@@ -961,490 +945,400 @@ def get_futures_data_for_symbols(symbols, api_key):
         except Exception:
             oi_value_clean = "N/A"
 
-        funding_bias = classify_funding_bias(funding_value_clean)
-        oi_bias = classify_oi_bias(oi_change)
-
-        if use_futures_confirm:
-            futures_long, futures_short = calculate_futures_scores(
-                funding_bias,
-                oi_bias
-            )
-        else:
-            futures_long, futures_short = 0, 0
-
         result[symbol] = {
             "Coinalyze symbol": cz_symbol,
             "Futures exchange": exchange,
             "Funding %": funding_value_clean,
-            "Funding biais": funding_bias,
+            "Funding biais": classify_funding_bias(funding_value_clean),
             "Open Interest": oi_value_clean,
-            "OI tendance": oi_bias,
+            "OI tendance": classify_oi_bias(oi_change),
             "OI variation %": oi_change,
-            "Score Futures Long": futures_long,
-            "Score Futures Short": futures_short
+            "OHLCV item": ohlcv_item
         }
-
-        result[symbol].update(pa_real_data)
 
     return result
 
 
 # =========================
-# SCORING
+# AGENT V7
 # =========================
 
-def classify_structure(perf, force_vs_btc, comparison_label):
-    if perf > 8 and force_vs_btc > 3:
-        return f"Momentum haussier fort {comparison_label}", "Breakout relatif", 24, 2
+def analyze_relative_strength(perf, btc_perf):
+    force = perf - btc_perf
 
-    if perf > 3 and force_vs_btc > 0:
-        return f"Pression acheteuse {comparison_label}", "Haut de momentum", 18, 5
-
-    if perf < -8 and force_vs_btc < -3:
-        return f"Momentum baissier fort {comparison_label}", "Breakdown relatif", 2, 24
-
-    if perf < -3 and force_vs_btc < 0:
-        return f"Pression vendeuse {comparison_label}", "Bas de momentum", 5, 18
-
-    if -2 <= perf <= 2:
-        return f"Range neutre {comparison_label}", "Milieu de range", 8, 8
-
-    if perf > 0:
-        return f"Léger biais haussier {comparison_label}", "Milieu de range", 12, 7
-
-    return f"Léger biais baissier {comparison_label}", "Milieu de range", 7, 12
-
-
-def calculate_volume_score(volume_24h, market_cap):
-    if not market_cap or market_cap <= 0:
-        return 3, "N/A"
-
-    volume_ratio = (volume_24h / market_cap) * 100
-
-    if volume_ratio > 20:
-        return 15, round(volume_ratio, 2)
-
-    if volume_ratio > 10:
-        return 10, round(volume_ratio, 2)
-
-    if volume_ratio > 3:
-        return 6, round(volume_ratio, 2)
-
-    return 2, round(volume_ratio, 2)
-
-
-def calculate_momentum_scores(perf):
-    if perf > 15:
-        long_score = 20
-    elif perf > 7:
-        long_score = 15
-    elif perf > 0:
-        long_score = 10
+    if force > 8:
+        label = "Très forte vs BTC"
+        score_long = 25
+        score_short = 0
+    elif force > 3:
+        label = "Forte vs BTC"
+        score_long = 18
+        score_short = 2
+    elif force > 0:
+        label = "Légèrement forte vs BTC"
+        score_long = 10
+        score_short = 5
+    elif force < -8:
+        label = "Très faible vs BTC"
+        score_long = 0
+        score_short = 25
+    elif force < -3:
+        label = "Faible vs BTC"
+        score_long = 2
+        score_short = 18
+    elif force < 0:
+        label = "Légèrement faible vs BTC"
+        score_long = 5
+        score_short = 10
     else:
-        long_score = 3
+        label = "Neutre vs BTC"
+        score_long = 6
+        score_short = 6
 
-    if perf < -15:
-        short_score = 20
-    elif perf < -7:
-        short_score = 15
-    elif perf < 0:
-        short_score = 10
-    else:
-        short_score = 3
+    return force, label, score_long, score_short
 
-    return long_score, short_score
 
-
-def calculate_force_scores(force_vs_btc):
-    if force_vs_btc > 10:
-        force_score_long = 20
-    elif force_vs_btc > 5:
-        force_score_long = 15
-    elif force_vs_btc > 0:
-        force_score_long = 10
-    else:
-        force_score_long = 3
-
-    if force_vs_btc < -10:
-        force_score_short = 20
-    elif force_vs_btc < -5:
-        force_score_short = 15
-    elif force_vs_btc < 0:
-        force_score_short = 10
-    else:
-        force_score_short = 3
-
-    return force_score_long, force_score_short
-
-
-def calculate_trend_scores(quote, force_vs_btc, funding_bias, oi_bias):
-    perf_1h = quote.get("percent_change_1h", 0) or 0
-    perf_24h = quote.get("percent_change_24h", 0) or 0
-    perf_7d = quote.get("percent_change_7d", 0) or 0
-    perf_30d = quote.get("percent_change_30d", 0) or 0
-
-    trend_long = 0
-    trend_short = 0
-    trend_notes = []
-
-    if comparison_label == "30 jours":
-        if perf_30d > 0:
-            trend_long += 8
-            trend_notes.append("30j positif")
-        elif perf_30d < 0:
-            trend_short += 8
-
-    if perf_7d > 0:
-        trend_long += 7
-        trend_notes.append("7j positif")
-    elif perf_7d < 0:
-        trend_short += 7
-
-    if perf_24h > 0:
-        trend_long += 5
-        trend_notes.append("24h positif")
-    elif perf_24h < 0:
-        trend_short += 5
-
-    if perf_1h > -1:
-        trend_long += 3
-        trend_notes.append("1h stable")
-    elif perf_1h < 1:
-        trend_short += 3
-
-    if force_vs_btc > 0:
-        trend_long += 5
-        trend_notes.append("force vs BTC positive")
-    elif force_vs_btc > -2:
-        trend_long += 3
-        trend_notes.append("force vs BTC correcte")
-
-    if force_vs_btc < 0:
-        trend_short += 5
-    elif force_vs_btc < 2:
-        trend_short += 3
-
-    if use_futures_confirm and oi_bias == "Haussier":
-        trend_long += 3
-        trend_short += 3
-        trend_notes.append("OI actif")
-
-    if use_futures_confirm and funding_bias in ["Neutre", "Haussier"]:
-        trend_long += 2
-
-    if use_futures_confirm and funding_bias in ["Neutre", "Baissier"]:
-        trend_short += 2
-
-    if trend_long >= 18 and trend_long > trend_short:
-        trend_profile = "Tendance haussière propre"
-    elif trend_short >= 18 and trend_short > trend_long:
-        trend_profile = "Tendance baissière propre"
-    elif trend_long >= 14 and trend_long >= trend_short:
-        trend_profile = "Biais haussier en construction"
-    elif trend_short >= 14 and trend_short > trend_long:
-        trend_profile = "Biais baissier en construction"
-    else:
-        trend_profile = "Tendance peu claire"
-
-    return trend_long, trend_short, trend_profile, " / ".join(trend_notes)
-
-
-def define_bias(score_long, score_short, mode):
-    if mode == "Long uniquement":
-        if score_long >= 110:
-            return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
-        if score_long >= 80:
-            return "Surveillance long", "Attendre confirmation long", "LONG"
-        return "Pas prioritaire", "Rien à faire", "NONE"
-
-    if mode == "Short uniquement":
-        if score_short >= 110:
-            return "Short potentiel", "Chercher entrée rebond short", "SHORT"
-        if score_short >= 80:
-            return "Surveillance short", "Attendre confirmation short", "SHORT"
-        return "Pas prioritaire", "Rien à faire", "NONE"
-
-    if score_long >= 110 and score_long > score_short:
-        return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
-
-    if score_short >= 110 and score_short > score_long:
-        return "Short potentiel", "Chercher entrée rebond short", "SHORT"
-
-    if score_long >= 80 and score_long >= score_short:
-        return "Surveillance long", "Attendre confirmation long", "LONG"
-
-    if score_short >= 80 and score_short > score_long:
-        return "Surveillance short", "Attendre confirmation short", "SHORT"
-
-    return "Pas prioritaire", "Rien à faire", "NONE"
-
-
-# =========================
-# PLAN TRADING
-# =========================
-
-def trade_plan_long(price, stop_percent):
-    entry = price * 0.99
-    stop = entry * (1 - stop_percent / 100)
-    risk_unit = entry - stop
-
-    return {
-        "Sens": "LONG",
-        "Entrée": round(entry, 6),
-        "Stop": round(stop, 6),
-        "TP1": round(entry + risk_unit * 2, 6),
-        "TP2": round(entry + risk_unit * 3, 6),
-        "Cible range": round(price * 1.04, 6),
-        "R/R TP1": 2.0,
-        "R/R TP2": 3.0
-    }
-
-
-def trade_plan_short(price, stop_percent):
-    entry = price * 1.01
-    stop = entry * (1 + stop_percent / 100)
-    risk_unit = stop - entry
-
-    return {
-        "Sens": "SHORT",
-        "Entrée": round(entry, 6),
-        "Stop": round(stop, 6),
-        "TP1": round(entry - risk_unit * 2, 6),
-        "TP2": round(entry - risk_unit * 3, 6),
-        "Cible range": round(price * 0.96, 6),
-        "R/R TP1": 2.0,
-        "R/R TP2": 3.0
-    }
-
-
-def decision_reason(
-    biais,
-    sens,
-    force_vs_btc,
-    score_long,
-    score_short,
-    funding_bias,
-    oi_bias,
-    trend_profile,
-    pa_real
-):
-    reasons = []
-
-    if biais == "Pas prioritaire":
-        if score_long < 80 and score_short < 80:
-            reasons.append("Scores long/short trop faibles")
-
-        if pa_real not in ["N/A", "Données insuffisantes"]:
-            reasons.append(pa_real)
-
-        if trend_profile != "Tendance peu claire":
-            reasons.append(trend_profile)
-
-        if -2 <= force_vs_btc <= 2:
-            reasons.append("Suit trop BTC")
-
-        if force_vs_btc < -2:
-            reasons.append("Faible vs BTC")
-
-        if force_vs_btc > 2:
-            reasons.append("Surperforme BTC mais setup insuffisant")
-
-        if use_futures_confirm:
-            if funding_bias == "Neutre":
-                reasons.append("Funding neutre")
-
-            if oi_bias == "Neutre":
-                reasons.append("OI neutre")
-
-        if not reasons:
-            reasons.append("Pas de confirmation suffisante")
-
-        return " / ".join(reasons)
-
-    if sens == "LONG":
-        reasons.append("Setup long détecté")
-
-        if pa_real in ["PA haussière forte", "PA haussière en construction"]:
-            reasons.append(pa_real)
-
-        if trend_profile in ["Tendance haussière propre", "Biais haussier en construction"]:
-            reasons.append(trend_profile)
-
-        reasons.append("Surperformance vs BTC" if force_vs_btc > 0 else "Force BTC faible")
-
-        if use_futures_confirm:
-            if funding_bias == "Haussier":
-                reasons.append("Funding haussier")
-            elif funding_bias == "Baissier":
-                reasons.append("Funding baissier")
-
-            if oi_bias == "Haussier":
-                reasons.append("OI en hausse")
-            elif oi_bias == "Baissier":
-                reasons.append("OI en baisse")
-
-        return " / ".join(reasons)
-
-    if sens == "SHORT":
-        reasons.append("Setup short détecté")
-
-        if pa_real in ["PA baissière forte", "PA baissière en construction"]:
-            reasons.append(pa_real)
-
-        if trend_profile in ["Tendance baissière propre", "Biais baissier en construction"]:
-            reasons.append(trend_profile)
-
-        reasons.append("Faiblesse vs BTC" if force_vs_btc < 0 else "Short malgré force relative")
-
-        return " / ".join(reasons)
-
-    return "Pas de signal clair"
-
-
-def build_row(symbol, coin, btc_perf, futures_data):
-    quote = coin["quote"]["USD"]
-
-    price = quote.get("price", 0) or 0
-    perf = get_perf_from_quote(quote, comparison_label)
-    force_vs_btc = perf - btc_perf
-
+def analyze_volume_momentum(quote):
     volume_24h = quote.get("volume_24h", 0) or 0
     market_cap = quote.get("market_cap", 0) or 0
 
-    structure, position_range, score_pa_long, score_pa_short = classify_structure(
-        perf,
-        force_vs_btc,
-        comparison_label
-    )
+    perf_1h = quote.get("percent_change_1h", 0) or 0
+    perf_24h = quote.get("percent_change_24h", 0) or 0
+    perf_7d = quote.get("percent_change_7d", 0) or 0
 
-    volume_score, volume_ratio = calculate_volume_score(volume_24h, market_cap)
+    if market_cap > 0:
+        volume_ratio = round((volume_24h / market_cap) * 100, 2)
+    else:
+        volume_ratio = "N/A"
 
-    momentum_long, momentum_short = calculate_momentum_scores(perf)
-    force_long, force_short = calculate_force_scores(force_vs_btc)
+    score_long = 0
+    score_short = 0
 
-    score_long_spot = score_pa_long + momentum_long + volume_score
-    score_short_spot = score_pa_short + momentum_short + volume_score
-
-    futures_long = futures_data.get("Score Futures Long", 0)
-    futures_short = futures_data.get("Score Futures Short", 0)
-
-    pa_real_long = futures_data.get("Score PA Réel Long", 0)
-    pa_real_short = futures_data.get("Score PA Réel Short", 0)
-
-    trend_long, trend_short, trend_profile, trend_notes = calculate_trend_scores(
-        quote,
-        force_vs_btc,
-        futures_data.get("Funding biais", "Neutre"),
-        futures_data.get("OI tendance", "Neutre")
-    )
-
-    score_long_total = (
-        score_long_spot
-        + force_long
-        + futures_long
-        + trend_long
-        + pa_real_long
-    )
-
-    score_short_total = (
-        score_short_spot
-        + force_short
-        + futures_short
-        + trend_short
-        + pa_real_short
-    )
-
-    biais, action, sens = define_bias(score_long_total, score_short_total, mode)
-
-    if sens == "NONE":
-        if mode == "Long uniquement":
-            sens_plan = "LONG"
-        elif mode == "Short uniquement":
-            sens_plan = "SHORT"
+    if volume_ratio != "N/A":
+        if volume_ratio > 20:
+            volume_label = "Volume très actif"
+            score_long += 15
+            score_short += 15
+        elif volume_ratio > 10:
+            volume_label = "Volume actif"
+            score_long += 10
+            score_short += 10
+        elif volume_ratio > 3:
+            volume_label = "Volume correct"
+            score_long += 6
+            score_short += 6
         else:
-            sens_plan = "LONG" if score_long_total >= score_short_total else "SHORT"
+            volume_label = "Volume faible"
+            score_long += 2
+            score_short += 2
     else:
-        sens_plan = sens
+        volume_label = "Volume N/A"
 
-    if sens_plan == "LONG":
-        plan = trade_plan_long(price, stop_percent)
-    elif sens_plan == "SHORT":
-        plan = trade_plan_short(price, stop_percent)
+    if perf_1h > 0 and perf_24h > 0:
+        momentum_label = "Momentum acheteur"
+        score_long += 15
+    elif perf_1h < 0 and perf_24h < 0:
+        momentum_label = "Momentum vendeur"
+        score_short += 15
+    elif perf_24h > 0 and perf_7d > 0:
+        momentum_label = "Momentum haussier lent"
+        score_long += 10
+    elif perf_24h < 0 and perf_7d < 0:
+        momentum_label = "Momentum baissier lent"
+        score_short += 10
     else:
-        plan = {
-            "Sens": "NONE",
-            "Entrée": "N/A",
-            "Stop": "N/A",
-            "TP1": "N/A",
-            "TP2": "N/A",
-            "Cible range": "N/A",
-            "R/R TP1": "N/A",
-            "R/R TP2": "N/A"
-        }
+        momentum_label = "Momentum mixte"
+        score_long += 5
+        score_short += 5
 
-    if sens == "NONE":
-        plan["Sens"] = f"{sens_plan} indicatif"
-
-    reason = decision_reason(
-        biais,
-        sens,
-        force_vs_btc,
-        score_long_total,
-        score_short_total,
-        futures_data.get("Funding biais", "Neutre"),
-        futures_data.get("OI tendance", "Neutre"),
-        trend_profile,
-        futures_data.get("PA réelle", "N/A")
-    )
-
-    row = {
-        "Crypto": f"{symbol}/USD",
-        "Nom": coin.get("name", symbol),
-        "Prix": round(price, 6),
-        f"Perf {comparison_label}": round(perf, 2),
-        f"Force vs BTC {comparison_label}": round(force_vs_btc, 2),
-        "Structure PA CMC": structure,
-        "Position Range CMC": position_range,
-        "PA réelle": futures_data.get("PA réelle", "N/A"),
-        "Tendance bougies": futures_data.get("Tendance bougies", "N/A"),
-        "Dernière bougie": futures_data.get("Dernière bougie", "N/A"),
-        "Breakout réel": futures_data.get("Breakout réel", "N/A"),
-        "Position range réel %": futures_data.get("Position range réel %", "N/A"),
-        "High PA": futures_data.get("High PA", "N/A"),
-        "Low PA": futures_data.get("Low PA", "N/A"),
-        "Profil tendance": trend_profile,
-        "Notes tendance": trend_notes,
-        "Volume / Market Cap %": volume_ratio,
-        "Score PA CMC Long": score_pa_long,
-        "Score PA CMC Short": score_pa_short,
-        "Score PA Réel Long": pa_real_long,
-        "Score PA Réel Short": pa_real_short,
-        "Score Volume": volume_score,
-        "Score Momentum Long": momentum_long,
-        "Score Momentum Short": momentum_short,
-        "Score Force Long": force_long,
-        "Score Force Short": force_short,
-        "Score Long Spot": score_long_spot,
-        "Score Short Spot": score_short_spot,
-        "Score Futures Long": futures_long,
-        "Score Futures Short": futures_short,
-        "Score Tendance Long": trend_long,
-        "Score Tendance Short": trend_short,
-        "Score Long Total": score_long_total,
-        "Score Short Total": score_short_total,
-        "Priority Score": max(score_long_total, score_short_total),
-        "Biais": biais,
-        "Raison décision": reason,
-        "Action": action,
-        "Distance stop %": stop_percent,
-        "Market Cap": round(market_cap, 2) if market_cap else "N/A",
-        "Volume 24h": round(volume_24h, 2) if volume_24h else "N/A",
+    return {
+        "label": f"{volume_label} / {momentum_label}",
+        "volume_ratio": volume_ratio,
+        "score_long": score_long,
+        "score_short": score_short
     }
 
-    row.update(futures_data)
-    row.update(plan)
 
-    return row
+def detect_advanced_move(direction, perf, tf_main):
+    range_position = tf_main.get("range_position", "N/A")
+    breakout = tf_main.get("breakout", "N/A")
+
+    advanced = False
+    alert = "Non"
+
+    if direction == "LONG":
+        if range_position != "N/A" and range_position > 85 and perf > 5:
+            advanced = True
+            alert = "Mouvement déjà avancé"
+        elif breakout == "Breakout" and perf > 8:
+            advanced = True
+            alert = "Breakout déjà loin"
+    elif direction == "SHORT":
+        if range_position != "N/A" and range_position < 15 and perf < -5:
+            advanced = True
+            alert = "Mouvement déjà avancé"
+        elif breakout == "Breakdown" and perf < -8:
+            advanced = True
+            alert = "Breakdown déjà loin"
+
+    return advanced, alert
+
+
+def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advanced, funding_bias, oi_bias):
+    risk = 50
+
+    structure = tf_main.get("structure", "")
+    range_position = tf_main.get("range_position", "N/A")
+
+    if direction == "LONG":
+        if "Haussière" in structure:
+            risk -= 15
+        if "forte" in force_label.lower():
+            risk -= 10
+        if range_position != "N/A" and range_position > 85:
+            risk += 20
+        if range_position != "N/A" and 40 <= range_position <= 75:
+            risk -= 10
+
+    elif direction == "SHORT":
+        if "Baissière" in structure:
+            risk -= 15
+        if "faible" in force_label.lower():
+            risk -= 10
+        if range_position != "N/A" and range_position < 15:
+            risk += 20
+        if range_position != "N/A" and 25 <= range_position <= 60:
+            risk -= 10
+
+    if "Volume faible" in volume_momentum:
+        risk += 10
+
+    if advanced:
+        risk += 20
+
+    if use_futures_confirm:
+        if direction == "LONG" and funding_bias == "Long crowded":
+            risk += 10
+        if direction == "SHORT" and funding_bias == "Short crowded":
+            risk += 10
+        if oi_bias == "Neutre":
+            risk += 5
+
+    risk = max(0, min(100, risk))
+
+    if risk <= 35:
+        risk_label = f"{risk}/100 — faible"
+    elif risk <= 60:
+        risk_label = f"{risk}/100 — moyen"
+    else:
+        risk_label = f"{risk}/100 — élevé"
+
+    return risk, risk_label
+
+
+def build_trade_plan(direction, price, tf_main):
+    if price <= 0:
+        return "N/A", "N/A", "N/A"
+
+    range_position = tf_main.get("range_position", "N/A")
+
+    if direction == "LONG":
+        entry = price * 0.99
+        invalidation = entry * (1 - stop_percent / 100)
+
+        if range_position != "N/A" and range_position > 85:
+            plan = "Attendre pullback long"
+        else:
+            plan = "Long possible sur pullback"
+
+    elif direction == "SHORT":
+        entry = price * 1.01
+        invalidation = entry * (1 + stop_percent / 100)
+
+        if range_position != "N/A" and range_position < 15:
+            plan = "Attendre rebond short"
+        else:
+            plan = "Short possible sur rebond"
+
+    else:
+        entry = "N/A"
+        invalidation = "N/A"
+        plan = "Pas de plan"
+
+    if isinstance(entry, float):
+        entry = round(entry, 6)
+
+    if isinstance(invalidation, float):
+        invalidation = round(invalidation, 6)
+
+    return plan, entry, invalidation
+
+
+def decide_agent_status(direction, score_long, score_short, tf_1h, tf_4h, tf_1d, advanced, risk):
+    aligned_long = (
+        "Haussière" in tf_1h["structure"]
+        and ("Haussière" in tf_4h["structure"] or "Compression" in tf_4h["structure"])
+    )
+
+    aligned_short = (
+        "Baissière" in tf_1h["structure"]
+        and ("Baissière" in tf_4h["structure"] or "Compression" in tf_4h["structure"])
+    )
+
+    if direction == "LONG":
+        if advanced:
+            return "Haussier mais pas tradable", "Le mouvement est déjà avancé."
+        if score_long >= 115 and aligned_long and risk <= 60:
+            return "Tradable long", "Setup long exploitable."
+        if score_long >= 85:
+            return "Setup long en préparation", "Haussier, mais attendre meilleure zone."
+        return "Haussier faible / pas prioritaire", "Pas assez propre."
+
+    if direction == "SHORT":
+        if advanced:
+            return "Baissier mais pas tradable", "Le mouvement est déjà avancé."
+        if score_short >= 115 and aligned_short and risk <= 60:
+            return "Tradable short", "Setup short exploitable."
+        if score_short >= 85:
+            return "Setup short en préparation", "Baissier, mais attendre meilleure zone."
+        return "Baissier faible / pas prioritaire", "Pas assez propre."
+
+    return "Pas tradable", "Aucun avantage clair."
+
+
+def build_agent_row(symbol, coin, btc_perf, market_data):
+    quote = coin["quote"]["USD"]
+    price = quote.get("price", 0) or 0
+    perf = get_perf_from_quote(quote, comparison_label)
+
+    tf_1h, tf_4h, tf_1d, candles = analyze_multi_tf(market_data.get("OHLCV item", {}))
+
+    if comparison_label == "1h":
+        tf_main = tf_1h
+    elif comparison_label in ["4h", "12h"]:
+        tf_main = tf_4h
+    else:
+        tf_main = tf_1d
+
+    force_vs_btc, force_label, force_long, force_short = analyze_relative_strength(perf, btc_perf)
+    volume_momentum = analyze_volume_momentum(quote)
+
+    structure_long = tf_1h["score_long"] + tf_4h["score_long"] + tf_1d["score_long"]
+    structure_short = tf_1h["score_short"] + tf_4h["score_short"] + tf_1d["score_short"]
+
+    score_long = structure_long + force_long + volume_momentum["score_long"]
+    score_short = structure_short + force_short + volume_momentum["score_short"]
+
+    if use_futures_confirm:
+        funding_bias = market_data.get("Funding biais", "Neutre")
+        oi_bias = market_data.get("OI tendance", "Neutre")
+
+        if oi_bias == "OI en hausse":
+            score_long += 5
+            score_short += 5
+
+        if funding_bias == "Long crowded":
+            score_long -= 5
+        elif funding_bias == "Short crowded":
+            score_short -= 5
+    else:
+        funding_bias = "Désactivé"
+        oi_bias = "Désactivé"
+
+    if mode == "Long uniquement":
+        direction = "LONG"
+    elif mode == "Short uniquement":
+        direction = "SHORT"
+    else:
+        if score_long > score_short:
+            direction = "LONG"
+        elif score_short > score_long:
+            direction = "SHORT"
+        else:
+            direction = "NEUTRE"
+
+    advanced, advanced_alert = detect_advanced_move(direction, perf, tf_main)
+
+    risk_value, risk_label = calculate_risk_score(
+        direction,
+        tf_main,
+        force_label,
+        volume_momentum["label"],
+        advanced,
+        market_data.get("Funding biais", "Neutre"),
+        market_data.get("OI tendance", "Neutre")
+    )
+
+    plan, entry, invalidation = build_trade_plan(direction, price, tf_main)
+
+    status, status_reason = decide_agent_status(
+        direction,
+        score_long,
+        score_short,
+        tf_1h,
+        tf_4h,
+        tf_1d,
+        advanced,
+        risk_value
+    )
+
+    if "préparation" in status.lower():
+        final_decision = "À surveiller"
+    elif "Tradable" in status:
+        final_decision = "Setup exploitable"
+    elif "pas tradable" in status.lower():
+        final_decision = "Non tradable maintenant"
+    else:
+        final_decision = "Pas prioritaire"
+
+    if (
+        "Compression" in tf_4h["structure"]
+        and abs(force_vs_btc) < 5
+        and volume_momentum["volume_ratio"] != "N/A"
+        and volume_momentum["volume_ratio"] > 3
+    ):
+        preparation_note = "Moins performant, mais setup possible en préparation"
+        score_agent_bonus = 15
+    else:
+        preparation_note = ""
+        score_agent_bonus = 0
+
+    score_agent = max(score_long, score_short) - risk_value + score_agent_bonus
+    score_agent = round(score_agent, 2)
+
+    main_reason = f"{status_reason} {force_label}. {volume_momentum['label']}."
+
+    if preparation_note:
+        main_reason += f" {preparation_note}."
+
+    return {
+        "Crypto": f"{symbol}/USD",
+        "Top surveillance": score_agent,
+        "Direction probable": direction,
+        "Statut tradable": status,
+        "Pourquoi": main_reason,
+        "Structure 1h": tf_1h["structure"],
+        "Structure 4h": tf_4h["structure"],
+        "Structure 1j": tf_1d["structure"],
+        "Force relative vs BTC": f"{round(force_vs_btc, 2)} % — {force_label}",
+        "Volume et momentum": volume_momentum["label"],
+        "OI / Funding / Liquidité": f"{oi_bias} / {funding_bias}",
+        "Plan": plan,
+        "Entrée idéale": entry,
+        "Zone d’invalidation": invalidation,
+        "Score risque": risk_label,
+        "Alerte mouvement avancé": advanced_alert,
+        "Décision finale": final_decision,
+        "Prix": round(price, 6),
+        f"Perf {comparison_label}": round(perf, 2),
+        "Score Long": round(score_long, 2),
+        "Score Short": round(score_short, 2),
+        "Range position": tf_main.get("range_position", "N/A"),
+        "Breakout": tf_main.get("breakout", "N/A"),
+        "Dernière bougie": tf_main.get("last_candle", "N/A"),
+        "Funding %": market_data.get("Funding %", "N/A"),
+        "OI variation %": market_data.get("OI variation %", "N/A")
+    }
 
 
 # =========================
@@ -1477,13 +1371,14 @@ if scan_button:
         cmc_data = fetch_cmc_quotes(",".join(request_symbols), cmc_api_key)
 
         btc_coin = extract_first_coin(cmc_data, "BTC")
+
         if btc_coin is None:
             raise Exception("BTC non récupéré depuis CoinMarketCap.")
 
         btc_quote = btc_coin["quote"]["USD"]
         btc_perf = get_perf_from_quote(btc_quote, comparison_label)
 
-        futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
+        market_map = get_market_data_for_symbols(symbols, coinalyze_api_key)
 
         with st.expander("Debug Coinalyze", expanded=False):
             st.write("OI + Funding activés :")
@@ -1495,7 +1390,7 @@ if scan_button:
             st.write("Matching symboles :")
             st.write(st.session_state.get("debug_symbol_map", {}))
 
-            st.write("Symboles Coinalyze utilisés pour les endpoints :")
+            st.write("Symboles Coinalyze utilisés :")
             st.write(st.session_state.get("debug_coinalyze_symbols_used", []))
 
             st.write("Intervalle OHLCV utilisé :")
@@ -1526,8 +1421,8 @@ if scan_button:
                     errors.append(f"{symbol}: non trouvé sur CoinMarketCap")
                     continue
 
-                futures_data = futures_map.get(symbol, get_fallback_futures_data())
-                rows.append(build_row(symbol, coin, btc_perf, futures_data))
+                market_data = market_map.get(symbol, get_fallback_market_data())
+                rows.append(build_agent_row(symbol, coin, btc_perf, market_data))
 
             except Exception as e:
                 errors.append(f"{symbol}: {e}")
@@ -1537,158 +1432,83 @@ if scan_button:
 
     if rows:
         df = pd.DataFrame(rows)
-        df = df.sort_values("Priority Score", ascending=False)
-
-        force_column_name = f"Force vs BTC {comparison_label}"
-        perf_column_name = f"Perf {comparison_label}"
+        df = df.sort_values("Top surveillance", ascending=False)
 
         visible_columns = [
             "Crypto",
-            "Prix",
-            perf_column_name,
-            force_column_name,
-            "PA réelle",
-            "Tendance bougies",
-            "Dernière bougie",
-            "Breakout réel",
-            "Position range réel %",
-            "Profil tendance",
-            "Funding biais",
-            "OI tendance",
-            "Score Long Total",
-            "Score Short Total",
-            "Biais",
-            "Raison décision",
-            "Sens",
-            "Entrée",
-            "Stop",
-            "TP1",
-            "TP2",
-            "Cible range",
+            "Top surveillance",
+            "Direction probable",
+            "Statut tradable",
+            "Pourquoi",
+            "Structure 1h",
+            "Structure 4h",
+            "Structure 1j",
+            "Force relative vs BTC",
+            "Volume et momentum",
+            "OI / Funding / Liquidité",
+            "Plan",
+            "Entrée idéale",
+            "Zone d’invalidation",
+            "Score risque",
+            "Alerte mouvement avancé",
+            "Décision finale"
         ]
 
-        df_light = df[visible_columns]
-
-        st.subheader("Classement PA réelle + OI + Funding")
-        st.dataframe(df_light, use_container_width=True)
+        st.subheader("Top coins à surveiller — Agent V7")
+        st.dataframe(df[visible_columns], use_container_width=True)
 
         best = df.iloc[0]
 
-        st.subheader("Stats du meilleur setup")
+        st.subheader("Meilleur setup détecté")
 
-        col1, col2, col3, col4, col5, col6 = st.columns(6)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric("Crypto", best["Crypto"])
-            st.metric("Sens", best["Sens"])
+            st.metric("Direction", best["Direction probable"])
 
         with col2:
-            st.metric("Score Long", f"{best['Score Long Total']}/170")
-            st.metric("Score Short", f"{best['Score Short Total']}/170")
+            st.metric("Statut", best["Statut tradable"])
+            st.metric("Décision", best["Décision finale"])
 
         with col3:
-            st.metric("Perf", f"{best[perf_column_name]} %")
-            st.metric("Force vs BTC", f"{best[force_column_name]} %")
+            st.metric("Score surveillance", best["Top surveillance"])
+            st.metric("Risque", best["Score risque"])
 
         with col4:
-            st.metric("PA réelle", best["PA réelle"])
-            st.metric("Bougies", best["Tendance bougies"])
+            st.metric("Entrée idéale", best["Entrée idéale"])
+            st.metric("Invalidation", best["Zone d’invalidation"])
 
         with col5:
-            st.metric("Funding", best["Funding biais"])
-            st.metric("Open Interest", best["OI tendance"])
+            st.metric("Alerte", best["Alerte mouvement avancé"])
+            st.metric("Perf", f"{best[f'Perf {comparison_label}']} %")
 
-        with col6:
-            st.metric("Biais", best["Biais"])
-            st.metric("Action", best["Action"])
+        st.subheader("Lecture agent")
 
-        st.subheader("Plan proposé")
+        c1, c2, c3, c4 = st.columns(4)
 
-        plan_col1, plan_col2, plan_col3, plan_col4, plan_col5, plan_col6 = st.columns(6)
+        with c1:
+            info_card("Structure 1h", best["Structure 1h"], "Lecture court terme.")
+            info_card("Structure 4h", best["Structure 4h"], "Contexte intermédiaire.")
 
-        with plan_col1:
-            st.metric("Entrée", best["Entrée"])
+        with c2:
+            info_card("Structure 1j", best["Structure 1j"], "Contexte principal.")
+            info_card("Force vs BTC", best["Force relative vs BTC"], "Surperformance ou faiblesse relative.")
 
-        with plan_col2:
-            st.metric("Stop", best["Stop"])
+        with c3:
+            info_card("Volume / Momentum", best["Volume et momentum"], "Activité + dynamique.")
+            info_card("OI / Funding", best["OI / Funding / Liquidité"], "Confirmation futures si activée.")
 
-        with plan_col3:
-            st.metric("TP1", best["TP1"])
+        with c4:
+            info_card("Plan", best["Plan"], f"Entrée : {best['Entrée idéale']}")
+            info_card("Invalidation", best["Zone d’invalidation"], best["Pourquoi"])
 
-        with plan_col4:
-            st.metric("TP2", best["TP2"])
-
-        with plan_col5:
-            st.metric("Cible range", best["Cible range"])
-
-        with plan_col6:
-            st.metric("Distance stop", f"{best['Distance stop %']} %")
-
-        st.subheader("Comment le résultat est obtenu")
-
-        exp1, exp2, exp3, exp4 = st.columns(4)
-
-        with exp1:
-            info_card(
-                "1. Force relative",
-                f"{best[force_column_name]} %",
-                f"Performance {best['Crypto']} comparée à BTC sur {comparison_label}."
-            )
-
-        with exp2:
-            info_card(
-                "2. Price Action",
-                best["PA réelle"],
-                f"{best['Tendance bougies']} / {best['Dernière bougie']} / {best['Breakout réel']}"
-            )
-
-        with exp3:
-            if use_futures_confirm:
-                info_card(
-                    "3. Futures",
-                    f"Funding {best['Funding biais']} / OI {best['OI tendance']}",
-                    f"OI variation : {best['OI variation %']} %."
-                )
-            else:
-                info_card(
-                    "3. Futures",
-                    "Désactivé",
-                    "Active OI + Funding dans la sidebar pour confirmation."
-                )
-
-        with exp4:
-            info_card(
-                "4. Décision",
-                f"{best['Sens']} — {best['Biais']}",
-                best["Action"]
-            )
-
-        with st.expander("Calcul technique complet", expanded=False):
-            tech1, tech2, tech3, tech4 = st.columns(4)
-
-            with tech1:
-                info_card("Prix actuel", best["Prix"], f"Temporalité : {comparison_label}")
-                info_card("Performance", f"{best[perf_column_name]} %", "Performance CMC.")
-                info_card("Force vs BTC", f"{best[force_column_name]} %", "Écart face à BTC.")
-
-            with tech2:
-                info_card("PA réelle", best["PA réelle"], "Lecture bougies OHLCV.")
-                info_card("Structure bougies", best["Tendance bougies"], best["Dernière bougie"])
-                info_card("Breakout", best["Breakout réel"], f"Range réel : {best['Position range réel %']} %")
-
-            with tech3:
-                info_card("Score PA réel", f"L {best['Score PA Réel Long']} / S {best['Score PA Réel Short']}", "Bougies + range + volume.")
-                info_card("Score Tendance", f"L {best['Score Tendance Long']} / S {best['Score Tendance Short']}", best["Profil tendance"])
-                info_card("Score Force", f"L {best['Score Force Long']} / S {best['Score Force Short']}", "Force relative BTC.")
-
-            with tech4:
-                info_card("Score Futures", f"L {best['Score Futures Long']} / S {best['Score Futures Short']}", "Funding + OI.")
-                info_card("Funding / OI", f"{best['Funding biais']} / {best['OI tendance']}", f"OI variation : {best['OI variation %']} %")
-                info_card("Score final", f"L {best['Score Long Total']} / S {best['Score Short Total']}", "Scores finaux.")
+        with st.expander("Table technique complète", expanded=False):
+            st.dataframe(df, use_container_width=True)
 
         st.caption(
-            "Prix/perf/volume : CoinMarketCap. Bougies : Coinalyze. "
-            "Toutes les temporalités utilisent les bougies 15min. Les requêtes OHLCV sont faites par paquets de 5."
+            "V7 : classement par qualité de setup, pas seulement par performance. "
+            "L'agent peut classer un coin haussier mais non tradable, ou un coin moins performant mais en préparation."
         )
 
     if errors:
@@ -1700,9 +1520,9 @@ else:
     st.markdown("""
     <div class="binance-card">
         <div class="binance-card-title">En attente</div>
-        <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
+        <div class="binance-card-value">Configure les paramètres, puis lance le scan.</div>
         <div class="small-text">
-            Version stable : bougies 15min Coinalyze + requêtes par paquets de 5. OI + Funding optionnels.
+            V7 : agent de setup avec structure 1h/4h/1j, force BTC, volume, momentum, risque, invalidation et tradabilité.
         </div>
     </div>
     """, unsafe_allow_html=True)
