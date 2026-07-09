@@ -119,6 +119,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
 # =========================
 # SIDEBAR
 # =========================
@@ -159,15 +160,17 @@ max_tokens = st.sidebar.slider(
     "Nombre max de cryptos à scanner",
     5,
     30,
-    20,
+    10,
     1
 )
 
 scan_button = st.sidebar.button("Scanner maintenant")
 
 st.sidebar.caption(
-    "CoinMarketCap = prix/perf/volume. Coinalyze = bougies/OI/funding."
+    "CoinMarketCap = prix/perf/volume. Coinalyze = bougies/OI/funding. "
+    "Anti-429 : évite de spammer le scan."
 )
+
 
 # =========================
 # HEADER
@@ -186,6 +189,7 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
 
 # =========================
 # AFFICHAGE
@@ -216,7 +220,7 @@ def get_secret(name):
 # API COINMARKETCAP
 # =========================
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=120)
 def fetch_cmc_quotes(symbols_csv, api_key):
     url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
 
@@ -276,12 +280,12 @@ def coinalyze_get(endpoint, params, api_key):
     return response.json()
 
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=1800)
 def fetch_coinalyze_future_markets(api_key):
     return coinalyze_get("future-markets", {}, api_key)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
@@ -293,7 +297,7 @@ def fetch_coinalyze_funding(symbols_csv, api_key):
     )
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
@@ -308,7 +312,7 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
     )
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=300)
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
@@ -326,7 +330,7 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     )
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=300)
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
@@ -344,11 +348,18 @@ def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key
 
 
 # =========================
-# TIMEFRAMES
+# TIMEFRAMES ANTI-429
 # =========================
 
-def get_pa_interval_and_range(comparison_label):
+def rounded_now():
     now = int(time.time())
+
+    # Important : arrondi à 5 minutes pour éviter de casser le cache à chaque scan.
+    return now - (now % 300)
+
+
+def get_pa_interval_and_range(comparison_label):
+    now = rounded_now()
 
     if comparison_label == "1h":
         return "15min", now - 24 * 3600, now
@@ -372,7 +383,7 @@ def get_pa_interval_and_range(comparison_label):
 
 
 def get_oi_interval_and_range(comparison_label):
-    now = int(time.time())
+    now = rounded_now()
 
     if comparison_label == "1h":
         return "1hour", now - 3 * 3600, now
@@ -469,7 +480,7 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
 
 
 # =========================
-# MATCHING COINALYZE CORRIGÉ
+# MATCHING COINALYZE
 # =========================
 
 def select_coinalyze_market(symbol, markets):
@@ -1459,7 +1470,7 @@ if scan_button:
 
         futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
 
-        with st.expander("Debug Coinalyze", expanded=True):
+        with st.expander("Debug Coinalyze", expanded=False):
             st.write("Nombre de marchés futures Coinalyze trouvés :")
             st.write(st.session_state.get("debug_markets_count", "Non récupéré"))
 
@@ -1649,7 +1660,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies/OI/funding : Coinalyze. "
-            "Cette version utilise le matching base_asset/quote_asset/is_perpetual pour trouver les vrais contrats futures."
+            "Anti-429 : cache 5 minutes + timestamps arrondis. Évite de spammer le scan."
         )
 
     if errors:
