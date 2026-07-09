@@ -469,7 +469,7 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
 
 
 # =========================
-# MARKET MATCHING COINALYZE
+# MATCHING COINALYZE CORRIGÉ
 # =========================
 
 def select_coinalyze_market(symbol, markets):
@@ -477,34 +477,21 @@ def select_coinalyze_market(symbol, markets):
     candidates = []
 
     for market in markets:
-        cz_symbol = str(market.get("symbol", "")).upper()
-        symbol_on_exchange = str(market.get("symbol_on_exchange", "")).upper()
         base_asset = str(market.get("base_asset", "")).upper()
         quote_asset = str(market.get("quote_asset", "")).upper()
-        exchange = str(market.get("exchange", "")).lower()
-
-        is_perpetual = market.get("is_perpetual", True)
+        is_perpetual = market.get("is_perpetual", False)
         margined = str(market.get("margined", "")).upper()
 
-        text_blob = f"{cz_symbol} {symbol_on_exchange} {base_asset} {quote_asset}"
-
-        direct_match = (
-            f"{symbol}USDT_PERP" in text_blob
-            or f"{symbol}USD_PERP" in text_blob
-            or f"{symbol}-USDT" in text_blob
-            or f"{symbol}/USDT" in text_blob
-            or f"{symbol}USDT" in text_blob
-        )
-
-        asset_match = (
-            base_asset == symbol
-            and quote_asset in ["USDT", "USD"]
-        )
-
-        if not direct_match and not asset_match:
+        if base_asset != symbol:
             continue
 
-        if is_perpetual is False:
+        if quote_asset not in ["USDT", "USD"]:
+            continue
+
+        if is_perpetual is not True:
+            continue
+
+        if margined not in ["STABLE", "USDT", "USD"]:
             continue
 
         candidates.append(market)
@@ -513,10 +500,24 @@ def select_coinalyze_market(symbol, markets):
         return None
 
     def score_market(m):
-        cz_symbol = str(m.get("symbol", "")).upper()
-        symbol_on_exchange = str(m.get("symbol_on_exchange", "")).upper()
         exchange = str(m.get("exchange", "")).lower()
+        quote_asset = str(m.get("quote_asset", "")).upper()
         score = 0
+
+        if quote_asset == "USDT":
+            score += 30
+
+        if m.get("has_ohlcv_data"):
+            score += 30
+
+        if m.get("has_buy_sell_data"):
+            score += 10
+
+        if m.get("has_long_short_ratio_data"):
+            score += 10
+
+        if m.get("is_perpetual"):
+            score += 20
 
         if "binance" in exchange:
             score += 100
@@ -528,21 +529,6 @@ def select_coinalyze_market(symbol, markets):
             score += 70
         elif "gate" in exchange:
             score += 50
-
-        if "USDT" in cz_symbol or "USDT" in symbol_on_exchange:
-            score += 20
-
-        if "PERP" in cz_symbol or "PERP" in symbol_on_exchange:
-            score += 20
-
-        if m.get("has_ohlcv_data"):
-            score += 10
-
-        if m.get("has_open_interest_data"):
-            score += 10
-
-        if m.get("has_funding_rate_data"):
-            score += 10
 
         return score
 
@@ -662,16 +648,13 @@ def analyze_real_price_action(ohlcv_item):
 
     score_long = 0
     score_short = 0
-    pa_notes = []
 
     if second_high > first_high and second_low > first_low:
         trend = "HH/HL haussier"
         score_long += 18
-        pa_notes.append("structure HH/HL")
     elif second_high < first_high and second_low < first_low:
         trend = "LH/LL baissier"
         score_short += 18
-        pa_notes.append("structure LH/LL")
     elif second_high > first_high and second_low < first_low:
         trend = "Range élargi"
         score_long += 5
@@ -684,11 +667,9 @@ def analyze_real_price_action(ohlcv_item):
     if close > previous_high * 1.002:
         breakout = "Breakout réel"
         score_long += 18
-        pa_notes.append("cassure high réel")
     elif close < previous_low * 0.998:
         breakout = "Breakdown réel"
         score_short += 18
-        pa_notes.append("cassure low réel")
     else:
         breakout = "Pas de cassure"
 
@@ -701,10 +682,8 @@ def analyze_real_price_action(ohlcv_item):
     if range_position != "N/A":
         if range_position > 75:
             score_long += 8
-            pa_notes.append("prix haut de range")
         elif range_position < 25:
             score_short += 8
-            pa_notes.append("prix bas de range")
         else:
             score_long += 3
             score_short += 3
@@ -720,11 +699,9 @@ def analyze_real_price_action(ohlcv_item):
     if last["c"] > last["o"] and body_ratio > 0.55:
         last_candle = "Bougie impulsive verte"
         score_long += 10
-        pa_notes.append("bougie verte forte")
     elif last["c"] < last["o"] and body_ratio > 0.55:
         last_candle = "Bougie impulsive rouge"
         score_short += 10
-        pa_notes.append("bougie rouge forte")
     elif last["c"] > last["o"]:
         last_candle = "Bougie verte modérée"
         score_long += 5
@@ -741,10 +718,8 @@ def analyze_real_price_action(ohlcv_item):
         if avg_volume > 0 and last_volume > avg_volume * 1.4:
             if last["c"] > last["o"]:
                 score_long += 8
-                pa_notes.append("volume confirme hausse")
             elif last["c"] < last["o"]:
                 score_short += 8
-                pa_notes.append("volume confirme baisse")
 
     if score_long >= 38 and score_long > score_short:
         pa_profile = "PA haussière forte"
@@ -836,10 +811,6 @@ def classify_oi_bias(oi_change):
 
 
 def calculate_futures_scores(funding_bias, oi_bias):
-    funding_long = 0
-    funding_short = 0
-    oi_score = 0
-
     if funding_bias == "Haussier":
         funding_long = 8
         funding_short = 4
@@ -995,7 +966,7 @@ def get_futures_data_for_symbols(symbols, api_key):
 
 
 # =========================
-# SCORING SPOT / TENDANCE
+# SCORING
 # =========================
 
 def classify_structure(perf, force_vs_btc, comparison_label):
@@ -1226,8 +1197,6 @@ def decision_reason(
     biais,
     sens,
     force_vs_btc,
-    structure_pa,
-    position_range,
     score_long,
     score_short,
     funding_bias,
@@ -1300,16 +1269,6 @@ def decision_reason(
             reasons.append(trend_profile)
 
         reasons.append("Faiblesse vs BTC" if force_vs_btc < 0 else "Short malgré force relative")
-
-        if funding_bias == "Haussier":
-            reasons.append("Funding haussier")
-        elif funding_bias == "Baissier":
-            reasons.append("Funding baissier")
-
-        if oi_bias == "Haussier":
-            reasons.append("OI en hausse")
-        elif oi_bias == "Baissier":
-            reasons.append("OI en baisse")
 
         return " / ".join(reasons)
 
@@ -1404,8 +1363,6 @@ def build_row(symbol, coin, btc_perf, futures_data):
         biais,
         sens,
         force_vs_btc,
-        structure,
-        position_range,
         score_long_total,
         score_short_total,
         futures_data.get("Funding biais", "Neutre"),
@@ -1506,9 +1463,6 @@ if scan_button:
             st.write("Nombre de marchés futures Coinalyze trouvés :")
             st.write(st.session_state.get("debug_markets_count", "Non récupéré"))
 
-            st.write("Exemple de marchés reçus :")
-            st.write(st.session_state.get("debug_markets_sample", "Aucun exemple"))
-
             st.write("Matching symboles :")
             st.write(st.session_state.get("debug_symbol_map", {}))
 
@@ -1531,17 +1485,6 @@ if scan_button:
                 "oi_history": st.session_state.get("debug_oi_history_error", None),
                 "ohlcv": st.session_state.get("debug_ohlcv_error", None),
             })
-
-            st.write("Dernières réponses API Coinalyze :")
-            st.write({
-                "future-markets status": st.session_state.get("debug_last_future-markets_status", None),
-                "future-markets text": st.session_state.get("debug_last_future-markets_text", None),
-                "ohlcv-history status": st.session_state.get("debug_last_ohlcv-history_status", None),
-                "ohlcv-history text": st.session_state.get("debug_last_ohlcv-history_text", None),
-            })
-
-            st.write("Données futures finales :")
-            st.write(futures_map)
 
         for symbol in symbols:
             try:
@@ -1706,7 +1649,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies/OI/funding : Coinalyze. "
-            "Le bloc Debug Coinalyze sert à vérifier pourquoi la PA réelle reste en N/A."
+            "Cette version utilise le matching base_asset/quote_asset/is_perpetual pour trouver les vrais contrats futures."
         )
 
     if errors:
