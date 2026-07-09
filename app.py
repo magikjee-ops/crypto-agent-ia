@@ -335,25 +335,27 @@ def rounded_now():
 def get_pa_interval_and_range(comparison_label):
     now = rounded_now()
 
+    # Version compatible : on force toutes les PA en 15min,
+    # car c'est l'intervalle qui fonctionne sur ton app.
     if comparison_label == "1h":
         return "15min", now - 24 * 3600, now
 
     if comparison_label == "4h":
-        return "1hour", now - 4 * 24 * 3600, now
+        return "15min", now - 2 * 24 * 3600, now
 
     if comparison_label == "12h":
-        return "1hour", now - 5 * 24 * 3600, now
+        return "15min", now - 3 * 24 * 3600, now
 
     if comparison_label == "1 jour":
-        return "4hour", now - 10 * 24 * 3600, now
+        return "15min", now - 5 * 24 * 3600, now
 
     if comparison_label == "7 jours":
-        return "4hour", now - 21 * 24 * 3600, now
+        return "15min", now - 10 * 24 * 3600, now
 
     if comparison_label == "30 jours":
-        return "4hour", now - 45 * 24 * 3600, now
+        return "15min", now - 20 * 24 * 3600, now
 
-    return "1hour", now - 7 * 24 * 3600, now
+    return "15min", now - 24 * 3600, now
 
 
 def get_oi_interval_and_range(comparison_label):
@@ -1661,7 +1663,7 @@ if scan_button:
 
         st.caption(
             "Prix/perf/volume : CoinMarketCap. Bougies : Coinalyze. "
-            "4h/1j/30j corrigés avec des intervalles Coinalyze plus compatibles."
+            "Toutes les temporalités utilisent des bougies 15min pour éviter les N/A."
         )
 
     if errors:
@@ -1675,7 +1677,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
         <div class="small-text">
-            Version stable : bougies OHLCV actives, OI + Funding optionnels pour éviter les limites Coinalyze.
+            Version stable : toutes les PA utilisent les bougies 15min Coinalyze. OI + Funding optionnels.
         </div>
     </div>
     """, unsafe_allow_html=True)
