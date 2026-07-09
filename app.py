@@ -6,7 +6,7 @@ import streamlit as st
 st.set_page_config(page_title="Crypto Agent IA", layout="wide")
 
 # =========================
-# STYLE TYPE BINANCE
+# STYLE
 # =========================
 
 st.markdown("""
@@ -119,7 +119,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================
 # SIDEBAR
 # =========================
@@ -164,19 +163,29 @@ max_tokens = st.sidebar.slider(
     1
 )
 
-scan_button = st.sidebar.button("Scanner maintenant")
-
-st.sidebar.caption(
-    "CoinMarketCap = prix/perf/volume. Coinalyze = bougies/OI/funding. "
-    "Anti-429 : évite de spammer le scan."
+use_futures_confirm = st.sidebar.checkbox(
+    "Activer OI + Funding",
+    value=False
 )
 
+scan_button = st.sidebar.button("Scanner maintenant")
+
+if use_futures_confirm:
+    st.sidebar.caption(
+        "Mode complet : bougies + OI + funding. Plus lourd pour Coinalyze."
+    )
+else:
+    st.sidebar.caption(
+        "Mode stable : bougies / PA réelle uniquement. OI + funding désactivés pour éviter les erreurs 429."
+    )
 
 # =========================
 # HEADER
 # =========================
 
 st.title("Crypto Agent IA — Scanner PA + OI + Funding")
+
+futures_status = "activés" if use_futures_confirm else "désactivés"
 
 st.markdown(f"""
 <div class="top-box">
@@ -185,11 +194,11 @@ st.markdown(f"""
         Sources : <span class="yellow">CoinMarketCap + Coinalyze</span> —
         Temporalité : <span class="yellow">{comparison_label}</span> —
         Mode : <span class="yellow">{mode}</span> —
-        Stop : <span class="yellow">{stop_percent} %</span>
+        Stop : <span class="yellow">{stop_percent} %</span> —
+        OI/Funding : <span class="yellow">{futures_status}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
-
 
 # =========================
 # AFFICHAGE
@@ -204,7 +213,6 @@ def info_card(title, value, extra=""):
     </div>
     """, unsafe_allow_html=True)
 
-
 # =========================
 # SECRETS
 # =========================
@@ -214,7 +222,6 @@ def get_secret(name):
         return st.secrets[name]
     except Exception:
         return None
-
 
 # =========================
 # API COINMARKETCAP
@@ -257,7 +264,6 @@ def extract_first_coin(data, symbol):
 
     return item
 
-
 # =========================
 # API COINALYZE
 # =========================
@@ -285,7 +291,7 @@ def fetch_coinalyze_future_markets(api_key):
     return coinalyze_get("future-markets", {}, api_key)
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
@@ -297,7 +303,7 @@ def fetch_coinalyze_funding(symbols_csv, api_key):
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
@@ -312,7 +318,7 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
@@ -330,7 +336,7 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     )
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=600)
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
@@ -346,15 +352,12 @@ def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key
         api_key
     )
 
-
 # =========================
-# TIMEFRAMES ANTI-429
+# TIMEFRAMES
 # =========================
 
 def rounded_now():
     now = int(time.time())
-
-    # Important : arrondi à 5 minutes pour éviter de casser le cache à chaque scan.
     return now - (now % 300)
 
 
@@ -421,7 +424,6 @@ def get_perf_from_quote(quote, comparison_label):
 
     return 0
 
-
 # =========================
 # OUTILS
 # =========================
@@ -477,7 +479,6 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
             st.session_state["debug_ohlcv_error"] = str(e)
 
     return all_data
-
 
 # =========================
 # MATCHING COINALYZE
@@ -578,7 +579,6 @@ def build_coinalyze_symbol_map(symbols, api_key):
     st.session_state["debug_symbol_map"] = result
 
     return result
-
 
 # =========================
 # PRICE ACTION RÉELLE
@@ -755,7 +755,6 @@ def analyze_real_price_action(ohlcv_item):
         "Low PA": round(low_range, 6)
     }
 
-
 # =========================
 # OI / FUNDING
 # =========================
@@ -878,37 +877,48 @@ def get_futures_data_for_symbols(symbols, api_key):
 
     symbols_csv = ",".join(coinalyze_symbols)
 
-    try:
-        funding_data = fetch_coinalyze_funding(symbols_csv, api_key)
-    except Exception as e:
-        st.session_state["debug_funding_error"] = str(e)
-        funding_data = []
-
-    try:
-        oi_data = fetch_coinalyze_open_interest(symbols_csv, api_key)
-    except Exception as e:
-        st.session_state["debug_oi_error"] = str(e)
-        oi_data = []
-
-    interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
-
-    try:
-        oi_history = fetch_coinalyze_oi_history(
-            symbols_csv,
-            interval,
-            from_ts,
-            to_ts,
-            api_key
-        )
-    except Exception as e:
-        st.session_state["debug_oi_history_error"] = str(e)
-        oi_history = []
-
+    # Bougies toujours actives
     try:
         ohlcv_history = fetch_ohlcv_in_chunks(coinalyze_symbols, api_key)
     except Exception as e:
         st.session_state["debug_ohlcv_error"] = str(e)
         ohlcv_history = []
+
+    # OI + funding optionnels
+    if use_futures_confirm:
+        try:
+            funding_data = fetch_coinalyze_funding(symbols_csv, api_key)
+        except Exception as e:
+            st.session_state["debug_funding_error"] = str(e)
+            funding_data = []
+
+        try:
+            oi_data = fetch_coinalyze_open_interest(symbols_csv, api_key)
+        except Exception as e:
+            st.session_state["debug_oi_error"] = str(e)
+            oi_data = []
+
+        interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
+
+        try:
+            oi_history = fetch_coinalyze_oi_history(
+                symbols_csv,
+                interval,
+                from_ts,
+                to_ts,
+                api_key
+            )
+        except Exception as e:
+            st.session_state["debug_oi_history_error"] = str(e)
+            oi_history = []
+    else:
+        funding_data = []
+        oi_data = []
+        oi_history = []
+
+        st.session_state["debug_funding_error"] = "Désactivé"
+        st.session_state["debug_oi_error"] = "Désactivé"
+        st.session_state["debug_oi_history_error"] = "Désactivé"
 
     st.session_state["debug_funding_count"] = len(funding_data) if isinstance(funding_data, list) else "N/A"
     st.session_state["debug_oi_count"] = len(oi_data) if isinstance(oi_data, list) else "N/A"
@@ -954,10 +964,13 @@ def get_futures_data_for_symbols(symbols, api_key):
         funding_bias = classify_funding_bias(funding_value_clean)
         oi_bias = classify_oi_bias(oi_change)
 
-        futures_long, futures_short = calculate_futures_scores(
-            funding_bias,
-            oi_bias
-        )
+        if use_futures_confirm:
+            futures_long, futures_short = calculate_futures_scores(
+                funding_bias,
+                oi_bias
+            )
+        else:
+            futures_long, futures_short = 0, 0
 
         result[symbol] = {
             "Coinalyze symbol": cz_symbol,
@@ -974,7 +987,6 @@ def get_futures_data_for_symbols(symbols, api_key):
         result[symbol].update(pa_real_data)
 
     return result
-
 
 # =========================
 # SCORING
@@ -1111,15 +1123,15 @@ def calculate_trend_scores(quote, force_vs_btc, funding_bias, oi_bias):
     elif force_vs_btc < 2:
         trend_short += 3
 
-    if oi_bias == "Haussier":
+    if use_futures_confirm and oi_bias == "Haussier":
         trend_long += 3
         trend_short += 3
         trend_notes.append("OI actif")
 
-    if funding_bias in ["Neutre", "Haussier"]:
+    if use_futures_confirm and funding_bias in ["Neutre", "Haussier"]:
         trend_long += 2
 
-    if funding_bias in ["Neutre", "Baissier"]:
+    if use_futures_confirm and funding_bias in ["Neutre", "Baissier"]:
         trend_short += 2
 
     if trend_long >= 18 and trend_long > trend_short:
@@ -1138,33 +1150,32 @@ def calculate_trend_scores(quote, force_vs_btc, funding_bias, oi_bias):
 
 def define_bias(score_long, score_short, mode):
     if mode == "Long uniquement":
-        if score_long >= 115:
+        if score_long >= 110:
             return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
-        if score_long >= 85:
+        if score_long >= 80:
             return "Surveillance long", "Attendre confirmation long", "LONG"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
     if mode == "Short uniquement":
-        if score_short >= 115:
+        if score_short >= 110:
             return "Short potentiel", "Chercher entrée rebond short", "SHORT"
-        if score_short >= 85:
+        if score_short >= 80:
             return "Surveillance short", "Attendre confirmation short", "SHORT"
         return "Pas prioritaire", "Rien à faire", "NONE"
 
-    if score_long >= 115 and score_long > score_short:
+    if score_long >= 110 and score_long > score_short:
         return "Long spot potentiel", "Chercher entrée pullback long", "LONG"
 
-    if score_short >= 115 and score_short > score_long:
+    if score_short >= 110 and score_short > score_long:
         return "Short potentiel", "Chercher entrée rebond short", "SHORT"
 
-    if score_long >= 85 and score_long >= score_short:
+    if score_long >= 80 and score_long >= score_short:
         return "Surveillance long", "Attendre confirmation long", "LONG"
 
-    if score_short >= 85 and score_short > score_long:
+    if score_short >= 80 and score_short > score_long:
         return "Surveillance short", "Attendre confirmation short", "SHORT"
 
     return "Pas prioritaire", "Rien à faire", "NONE"
-
 
 # =========================
 # PLAN TRADING
@@ -1218,7 +1229,7 @@ def decision_reason(
     reasons = []
 
     if biais == "Pas prioritaire":
-        if score_long < 85 and score_short < 85:
+        if score_long < 80 and score_short < 80:
             reasons.append("Scores long/short trop faibles")
 
         if pa_real not in ["N/A", "Données insuffisantes"]:
@@ -1236,11 +1247,12 @@ def decision_reason(
         if force_vs_btc > 2:
             reasons.append("Surperforme BTC mais setup insuffisant")
 
-        if funding_bias == "Neutre":
-            reasons.append("Funding neutre")
+        if use_futures_confirm:
+            if funding_bias == "Neutre":
+                reasons.append("Funding neutre")
 
-        if oi_bias == "Neutre":
-            reasons.append("OI neutre")
+            if oi_bias == "Neutre":
+                reasons.append("OI neutre")
 
         if not reasons:
             reasons.append("Pas de confirmation suffisante")
@@ -1258,15 +1270,16 @@ def decision_reason(
 
         reasons.append("Surperformance vs BTC" if force_vs_btc > 0 else "Force BTC faible")
 
-        if funding_bias == "Haussier":
-            reasons.append("Funding haussier")
-        elif funding_bias == "Baissier":
-            reasons.append("Funding baissier")
+        if use_futures_confirm:
+            if funding_bias == "Haussier":
+                reasons.append("Funding haussier")
+            elif funding_bias == "Baissier":
+                reasons.append("Funding baissier")
 
-        if oi_bias == "Haussier":
-            reasons.append("OI en hausse")
-        elif oi_bias == "Baissier":
-            reasons.append("OI en baisse")
+            if oi_bias == "Haussier":
+                reasons.append("OI en hausse")
+            elif oi_bias == "Baissier":
+                reasons.append("OI en baisse")
 
         return " / ".join(reasons)
 
@@ -1431,7 +1444,6 @@ def build_row(symbol, coin, btc_perf, futures_data):
 
     return row
 
-
 # =========================
 # SCAN
 # =========================
@@ -1471,6 +1483,9 @@ if scan_button:
         futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
 
         with st.expander("Debug Coinalyze", expanded=False):
+            st.write("OI + Funding activés :")
+            st.write(use_futures_confirm)
+
             st.write("Nombre de marchés futures Coinalyze trouvés :")
             st.write(st.session_state.get("debug_markets_count", "Non récupéré"))
 
@@ -1622,11 +1637,18 @@ if scan_button:
             )
 
         with exp3:
-            info_card(
-                "3. Futures",
-                f"Funding {best['Funding biais']} / OI {best['OI tendance']}",
-                f"OI variation : {best['OI variation %']} %."
-            )
+            if use_futures_confirm:
+                info_card(
+                    "3. Futures",
+                    f"Funding {best['Funding biais']} / OI {best['OI tendance']}",
+                    f"OI variation : {best['OI variation %']} %."
+                )
+            else:
+                info_card(
+                    "3. Futures",
+                    "Désactivé",
+                    "Active OI + Funding dans la sidebar pour confirmation."
+                )
 
         with exp4:
             info_card(
@@ -1659,8 +1681,8 @@ if scan_button:
                 info_card("Score final", f"L {best['Score Long Total']} / S {best['Score Short Total']}", "Scores finaux.")
 
         st.caption(
-            "Prix/perf/volume : CoinMarketCap. Bougies/OI/funding : Coinalyze. "
-            "Anti-429 : cache 5 minutes + timestamps arrondis. Évite de spammer le scan."
+            "Prix/perf/volume : CoinMarketCap. Bougies : Coinalyze. "
+            "OI + Funding sont optionnels pour limiter les erreurs 429."
         )
 
     if errors:
@@ -1674,7 +1696,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Configure les paramètres dans la sidebar, puis lance le scan.</div>
         <div class="small-text">
-            Cette version utilise CoinMarketCap + Coinalyze avec vraies bougies OHLCV, OI et funding.
+            Version stable : bougies OHLCV actives, OI + Funding optionnels pour éviter les limites Coinalyze.
         </div>
     </div>
     """, unsafe_allow_html=True)
