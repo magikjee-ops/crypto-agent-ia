@@ -470,21 +470,18 @@ def select_coinalyze_market(symbol, markets):
     candidates = []
 
     for market in markets:
-        base = str(market.get("base_asset", "")).upper()
-        quote = str(market.get("quote_asset", "")).upper()
-        is_perp = bool(market.get("is_perpetual", False))
-        margined = str(market.get("margined", "")).upper()
+        cz_symbol = str(market.get("symbol", "")).upper()
+        exchange = str(market.get("exchange", "")).lower()
 
-        if base != symbol:
+        if not cz_symbol:
             continue
 
-        if quote not in ["USDT", "USD"]:
-            continue
+        valid_patterns = [
+            f"{symbol}USDT_PERP",
+            f"{symbol}USD_PERP"
+        ]
 
-        if not is_perp:
-            continue
-
-        if margined not in ["STABLE", "USD", "USDT"]:
+        if not any(pattern in cz_symbol for pattern in valid_patterns):
             continue
 
         candidates.append(market)
@@ -493,23 +490,26 @@ def select_coinalyze_market(symbol, markets):
         return None
 
     def score_market(m):
+        cz_symbol = str(m.get("symbol", "")).upper()
         exchange = str(m.get("exchange", "")).lower()
         score = 0
 
         if "binance" in exchange:
             score += 100
         elif "bybit" in exchange:
-            score += 80
+            score += 90
         elif "okx" in exchange:
-            score += 70
+            score += 80
         elif "bitget" in exchange:
-            score += 60
+            score += 70
+        elif "gate" in exchange:
+            score += 50
 
-        if m.get("has_long_short_ratio_data"):
-            score += 5
+        if "USDT_PERP" in cz_symbol:
+            score += 20
 
-        if m.get("has_ohlcv_data"):
-            score += 3
+        if "_PERP" in cz_symbol:
+            score += 20
 
         return score
 
@@ -623,7 +623,6 @@ def analyze_real_price_action(ohlcv_item):
     score_short = 0
     pa_notes = []
 
-    # Structure HH/HL ou LH/LL
     if second_high > first_high and second_low > first_low:
         trend = "HH/HL haussier"
         score_long += 18
@@ -641,7 +640,6 @@ def analyze_real_price_action(ohlcv_item):
         score_long += 4
         score_short += 4
 
-    # Breakout / breakdown réel
     if close > previous_high * 1.002:
         breakout = "Breakout réel"
         score_long += 18
@@ -653,7 +651,6 @@ def analyze_real_price_action(ohlcv_item):
     else:
         breakout = "Pas de cassure"
 
-    # Position range réel
     if high_range != low_range:
         range_position = ((close - low_range) / (high_range - low_range)) * 100
         range_position = round(range_position, 2)
@@ -671,7 +668,6 @@ def analyze_real_price_action(ohlcv_item):
             score_long += 3
             score_short += 3
 
-    # Dernière bougie
     body = abs(last["c"] - last["o"])
     candle_range = last["h"] - last["l"]
 
@@ -697,7 +693,6 @@ def analyze_real_price_action(ohlcv_item):
     else:
         last_candle = "Doji / neutre"
 
-    # Volume confirmation
     if len(volumes) >= 8:
         avg_volume = sum(volumes[-8:-1]) / len(volumes[-8:-1])
         last_volume = volumes[-1]
@@ -1454,6 +1449,9 @@ if scan_button:
         btc_perf = get_perf_from_quote(btc_quote, comparison_label)
 
         futures_map = get_futures_data_for_symbols(symbols, coinalyze_api_key)
+
+        with st.expander("Debug Coinalyze", expanded=False):
+            st.write(futures_map)
 
         for symbol in symbols:
             try:
