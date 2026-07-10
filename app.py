@@ -1,9 +1,69 @@
 import time
+import json
+import hashlib
 import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Crypto Agent IA V7", layout="wide")
+st.set_page_config(page_title="Crypto Agent IA V8", layout="wide")
+
+# =========================
+# CONFIG COLONNES
+# =========================
+
+DEFAULT_WATCHLIST = (
+    "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
+    "BNB, ONDO, SOL, SYRUP, ZEC, NEAR, SUN, RENDER, MORPHO, BCH, DASH"
+)
+
+ALL_COLUMNS = [
+    "Crypto",
+    "Top surveillance",
+    "Direction probable",
+    "Statut tradable",
+    "Pourquoi",
+    "Structure 1h",
+    "Structure 4h",
+    "Structure 1j",
+    "Force relative vs BTC",
+    "Volume et momentum",
+    "OI / Funding / Liquidité",
+    "Plan",
+    "Entrée idéale",
+    "Zone d’invalidation",
+    "Score risque",
+    "Alerte mouvement avancé",
+    "Décision finale",
+    "Prix",
+    "Score Long",
+    "Score Short",
+    "Range position",
+    "Breakout",
+    "Dernière bougie",
+    "Funding %",
+    "OI variation %"
+]
+
+DEFAULT_COLUMNS = [
+    "Crypto",
+    "Top surveillance",
+    "Direction probable",
+    "Statut tradable",
+    "Pourquoi",
+    "Structure 1h",
+    "Structure 4h",
+    "Structure 1j",
+    "Force relative vs BTC",
+    "Volume et momentum",
+    "OI / Funding / Liquidité",
+    "Plan",
+    "Entrée idéale",
+    "Zone d’invalidation",
+    "Score risque",
+    "Alerte mouvement avancé",
+    "Décision finale"
+]
+
 
 # =========================
 # STYLE
@@ -99,18 +159,255 @@ div[data-testid="stMetricValue"] {
 
 
 # =========================
+# SECRETS
+# =========================
+
+def get_secret(name):
+    try:
+        return st.secrets[name]
+    except Exception:
+        return None
+
+
+# =========================
+# SUPABASE PROFILS
+# =========================
+
+def hash_pin(pin):
+    return hashlib.sha256(pin.encode("utf-8")).hexdigest()
+
+
+def supabase_headers():
+    key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
+
+
+def supabase_base_url():
+    url = get_secret("SUPABASE_URL")
+    if not url:
+        return None
+    return url.rstrip("/") + "/rest/v1/trading_profiles"
+
+
+def supabase_ready():
+    return bool(get_secret("SUPABASE_URL")) and bool(get_secret("SUPABASE_SERVICE_ROLE_KEY"))
+
+
+def load_profile(profile_name, pin):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+
+    if not profile_name or not pin:
+        raise Exception("Nom de profil et PIN obligatoires.")
+
+    pin_hash = hash_pin(pin)
+    url = supabase_base_url()
+
+    params = {
+        "profile_name": f"eq.{profile_name}",
+        "pin_hash": f"eq.{pin_hash}",
+        "select": "*"
+    }
+
+    response = requests.get(
+        url,
+        headers=supabase_headers(),
+        params=params,
+        timeout=20
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Erreur Supabase load {response.status_code}: {response.text}")
+
+    data = response.json()
+
+    if not data:
+        raise Exception("Profil introuvable ou PIN incorrect.")
+
+    return data[0]
+
+
+def save_profile(profile_name, pin, payload):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+
+    if not profile_name or not pin:
+        raise Exception("Nom de profil et PIN obligatoires.")
+
+    pin_hash = hash_pin(pin)
+    url = supabase_base_url()
+
+    existing = requests.get(
+        url,
+        headers=supabase_headers(),
+        params={
+            "profile_name": f"eq.{profile_name}",
+            "pin_hash": f"eq.{pin_hash}",
+            "select": "id"
+        },
+        timeout=20
+    )
+
+    if existing.status_code != 200:
+        raise Exception(f"Erreur Supabase check {existing.status_code}: {existing.text}")
+
+    existing_data = existing.json()
+
+    clean_payload = {
+        "profile_name": profile_name,
+        "pin_hash": pin_hash,
+        "watchlist": payload["watchlist"],
+        "selected_columns": payload["selected_columns"],
+        "mode": payload["mode"],
+        "stop_percent": payload["stop_percent"],
+        "max_tokens": payload["max_tokens"],
+        "use_futures_confirm": payload["use_futures_confirm"],
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+
+    if existing_data:
+        profile_id = existing_data[0]["id"]
+
+        response = requests.patch(
+            url,
+            headers=supabase_headers(),
+            params={"id": f"eq.{profile_id}"},
+            data=json.dumps(clean_payload),
+            timeout=20
+        )
+    else:
+        response = requests.post(
+            url,
+            headers=supabase_headers(),
+            data=json.dumps(clean_payload),
+            timeout=20
+        )
+
+    if response.status_code not in [200, 201]:
+        raise Exception(f"Erreur Supabase save {response.status_code}: {response.text}")
+
+    return response.json()
+
+
+def delete_profile(profile_name, pin):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+
+    if not profile_name or not pin:
+        raise Exception("Nom de profil et PIN obligatoires.")
+
+    pin_hash = hash_pin(pin)
+    url = supabase_base_url()
+
+    response = requests.delete(
+        url,
+        headers=supabase_headers(),
+        params={
+            "profile_name": f"eq.{profile_name}",
+            "pin_hash": f"eq.{pin_hash}"
+        },
+        timeout=20
+    )
+
+    if response.status_code not in [200, 204]:
+        raise Exception(f"Erreur Supabase delete {response.status_code}: {response.text}")
+
+    return True
+
+
+# =========================
+# SESSION DEFAULTS
+# =========================
+
+if "watchlist_input" not in st.session_state:
+    st.session_state["watchlist_input"] = DEFAULT_WATCHLIST
+
+if "mode_input" not in st.session_state:
+    st.session_state["mode_input"] = "Long + Short"
+
+if "stop_input" not in st.session_state:
+    st.session_state["stop_input"] = 1.0
+
+if "max_tokens_input" not in st.session_state:
+    st.session_state["max_tokens_input"] = 10
+
+if "use_futures_confirm_input" not in st.session_state:
+    st.session_state["use_futures_confirm_input"] = False
+
+if "columns_input" not in st.session_state:
+    st.session_state["columns_input"] = DEFAULT_COLUMNS
+
+
+# =========================
 # SIDEBAR
 # =========================
 
-st.sidebar.title("Paramètres V7")
+st.sidebar.title("Paramètres V8")
 
-default_watchlist = (
-    "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
-    "BNB, ONDO, SOL, SYRUP, ZEC, NEAR, SUN, RENDER, MORPHO, BCH, DASH"
-)
+with st.sidebar.expander("Profil utilisateur", expanded=True):
+    profile_name = st.text_input("Nom du profil", key="profile_name_input")
+    profile_pin = st.text_input("Code PIN", type="password", key="profile_pin_input")
+
+    col_load, col_delete = st.columns(2)
+
+    with col_load:
+        load_button = st.button("Charger")
+
+    with col_delete:
+        delete_button = st.button("Supprimer")
+
+    if load_button:
+        try:
+            profile = load_profile(profile_name, profile_pin)
+
+            st.session_state["watchlist_input"] = profile.get("watchlist", DEFAULT_WATCHLIST)
+            st.session_state["mode_input"] = profile.get("mode", "Long + Short")
+            st.session_state["stop_input"] = float(profile.get("stop_percent", 1.0))
+            st.session_state["max_tokens_input"] = int(profile.get("max_tokens", 10))
+            st.session_state["use_futures_confirm_input"] = bool(profile.get("use_futures_confirm", False))
+
+            loaded_columns = profile.get("selected_columns", DEFAULT_COLUMNS)
+
+            if isinstance(loaded_columns, str):
+                try:
+                    loaded_columns = json.loads(loaded_columns)
+                except Exception:
+                    loaded_columns = DEFAULT_COLUMNS
+
+            loaded_columns = [c for c in loaded_columns if c in ALL_COLUMNS]
+
+            if not loaded_columns:
+                loaded_columns = DEFAULT_COLUMNS
+
+            st.session_state["columns_input"] = loaded_columns
+            st.session_state["profile_loaded_message"] = f"Profil chargé : {profile_name}"
+
+            st.rerun()
+
+        except Exception as e:
+            st.error(str(e))
+
+    if delete_button:
+        try:
+            delete_profile(profile_name, profile_pin)
+            st.success("Profil supprimé.")
+        except Exception as e:
+            st.error(str(e))
+
+if "profile_loaded_message" in st.session_state:
+    st.sidebar.success(st.session_state["profile_loaded_message"])
 
 with st.sidebar.expander("Watchlist", expanded=False):
-    watchlist = st.text_area("Panier de cryptos", default_watchlist, height=180)
+    watchlist = st.text_area(
+        "Panier de cryptos",
+        height=180,
+        key="watchlist_input"
+    )
 
 comparison_label = st.sidebar.selectbox(
     "Temporalité principale",
@@ -119,7 +416,8 @@ comparison_label = st.sidebar.selectbox(
 
 mode = st.sidebar.selectbox(
     "Mode d'analyse",
-    ["Long + Short", "Long uniquement", "Short uniquement"]
+    ["Long + Short", "Long uniquement", "Short uniquement"],
+    key="mode_input"
 )
 
 stop_percent = st.sidebar.slider(
@@ -127,7 +425,8 @@ stop_percent = st.sidebar.slider(
     0.25,
     5.0,
     1.0,
-    0.25
+    0.25,
+    key="stop_input"
 )
 
 max_tokens = st.sidebar.slider(
@@ -135,13 +434,42 @@ max_tokens = st.sidebar.slider(
     5,
     30,
     10,
-    1
+    1,
+    key="max_tokens_input"
 )
 
 use_futures_confirm = st.sidebar.checkbox(
     "Activer OI + Funding",
-    value=False
+    key="use_futures_confirm_input"
 )
+
+selected_columns = st.sidebar.multiselect(
+    "Colonnes à afficher",
+    ALL_COLUMNS,
+    key="columns_input"
+)
+
+if not selected_columns:
+    selected_columns = DEFAULT_COLUMNS
+
+save_button = st.sidebar.button("Sauvegarder profil")
+
+if save_button:
+    try:
+        payload = {
+            "watchlist": st.session_state["watchlist_input"],
+            "selected_columns": selected_columns,
+            "mode": st.session_state["mode_input"],
+            "stop_percent": float(st.session_state["stop_input"]),
+            "max_tokens": int(st.session_state["max_tokens_input"]),
+            "use_futures_confirm": bool(st.session_state["use_futures_confirm_input"])
+        }
+
+        save_profile(profile_name, profile_pin, payload)
+        st.sidebar.success("Profil sauvegardé.")
+
+    except Exception as e:
+        st.sidebar.error(str(e))
 
 scan_button = st.sidebar.button("Scanner maintenant")
 
@@ -155,13 +483,13 @@ else:
 # HEADER
 # =========================
 
-st.title("Crypto Agent IA V7 — Agent Setup Trading")
+st.title("Crypto Agent IA V8 — Profils + Agent Setup Trading")
 
 futures_status = "activés" if use_futures_confirm else "désactivés"
 
 st.markdown(f"""
 <div class="top-box">
-    <div class="top-title">Scanner de setups — logique agent IA</div>
+    <div class="top-title">Scanner de setups — profils sauvegardés</div>
     <div class="top-sub">
         Critères : <span class="yellow">structure 1h/4h/1j, force BTC, volume, momentum, tradabilité, risque, invalidation</span><br>
         Temporalité principale : <span class="yellow">{comparison_label}</span> —
@@ -185,17 +513,6 @@ def info_card(title, value, extra=""):
         <div class="small-text">{extra}</div>
     </div>
     """, unsafe_allow_html=True)
-
-
-# =========================
-# SECRETS
-# =========================
-
-def get_secret(name):
-    try:
-        return st.secrets[name]
-    except Exception:
-        return None
 
 
 # =========================
@@ -341,7 +658,6 @@ def rounded_now():
 def get_pa_interval_and_range(comparison_label):
     now = rounded_now()
 
-    # Toutes les bougies en 15min, car c'est ce qui fonctionne sur ton app.
     if comparison_label == "1h":
         return "15min", now - 24 * 3600, now
 
@@ -687,25 +1003,22 @@ def analyze_structure(candles, label):
     else:
         range_position = "N/A"
 
+    advanced = False
+
     if range_position != "N/A":
         if range_position > 85:
             score_long += 5
             advanced = True
         elif range_position > 65:
             score_long += 10
-            advanced = False
         elif range_position < 15:
             score_short += 5
             advanced = True
         elif range_position < 35:
             score_short += 10
-            advanced = False
         else:
             score_long += 5
             score_short += 5
-            advanced = False
-    else:
-        advanced = False
 
     body = abs(last["c"] - last["o"])
     candle_range = last["h"] - last["l"]
@@ -744,6 +1057,7 @@ def analyze_structure(candles, label):
     global_range = high_range - low_range
 
     compression = False
+
     if global_range > 0 and recent_range / global_range < 0.35:
         compression = True
 
@@ -810,6 +1124,7 @@ def classify_funding_bias(funding_value):
 
     if value > 0.03:
         return "Long crowded"
+
     if value < -0.02:
         return "Short crowded"
 
@@ -827,6 +1142,7 @@ def classify_oi_bias(oi_change):
 
     if value > 5:
         return "OI en hausse"
+
     if value < -5:
         return "OI en baisse"
 
@@ -960,7 +1276,7 @@ def get_market_data_for_symbols(symbols, api_key):
 
 
 # =========================
-# AGENT V7
+# AGENT V8
 # =========================
 
 def analyze_relative_strength(perf, btc_perf):
@@ -1073,6 +1389,7 @@ def detect_advanced_move(direction, perf, tf_main):
         elif breakout == "Breakout" and perf > 8:
             advanced = True
             alert = "Breakout déjà loin"
+
     elif direction == "SHORT":
         if range_position != "N/A" and range_position < 15 and perf < -5:
             advanced = True
@@ -1434,27 +1751,12 @@ if scan_button:
         df = pd.DataFrame(rows)
         df = df.sort_values("Top surveillance", ascending=False)
 
-        visible_columns = [
-            "Crypto",
-            "Top surveillance",
-            "Direction probable",
-            "Statut tradable",
-            "Pourquoi",
-            "Structure 1h",
-            "Structure 4h",
-            "Structure 1j",
-            "Force relative vs BTC",
-            "Volume et momentum",
-            "OI / Funding / Liquidité",
-            "Plan",
-            "Entrée idéale",
-            "Zone d’invalidation",
-            "Score risque",
-            "Alerte mouvement avancé",
-            "Décision finale"
-        ]
+        visible_columns = [c for c in selected_columns if c in df.columns]
 
-        st.subheader("Top coins à surveiller — Agent V7")
+        if not visible_columns:
+            visible_columns = [c for c in DEFAULT_COLUMNS if c in df.columns]
+
+        st.subheader("Top coins à surveiller — Agent V8")
         st.dataframe(df[visible_columns], use_container_width=True)
 
         best = df.iloc[0]
@@ -1507,8 +1809,8 @@ if scan_button:
             st.dataframe(df, use_container_width=True)
 
         st.caption(
-            "V7 : classement par qualité de setup, pas seulement par performance. "
-            "L'agent peut classer un coin haussier mais non tradable, ou un coin moins performant mais en préparation."
+            "V8 : profils Supabase + colonnes personnalisables + agent de setup. "
+            "L'utilisateur peut sauvegarder sa watchlist, son affichage et ses paramètres."
         )
 
     if errors:
@@ -1520,9 +1822,9 @@ else:
     st.markdown("""
     <div class="binance-card">
         <div class="binance-card-title">En attente</div>
-        <div class="binance-card-value">Configure les paramètres, puis lance le scan.</div>
+        <div class="binance-card-value">Configure les paramètres, charge ou sauvegarde ton profil, puis lance le scan.</div>
         <div class="small-text">
-            V7 : agent de setup avec structure 1h/4h/1j, force BTC, volume, momentum, risque, invalidation et tradabilité.
+            V8 : profils Supabase, watchlist sauvegardée, colonnes personnalisables, agent de setup avec structure 1h/4h/1j.
         </div>
     </div>
     """, unsafe_allow_html=True)
