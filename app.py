@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Crypto Agent IA V9", layout="wide")
+st.set_page_config(page_title="Crypto Agent IA V9.1", layout="wide")
 
 DEFAULT_WATCHLIST = (
     "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
@@ -27,6 +27,8 @@ DEFAULT_COLUMNS = [
     "Volume et momentum", "OI / Funding / Liquidité", "Plan", "Entrée idéale",
     "Zone d’invalidation", "Score risque", "Alerte mouvement avancé", "Décision finale"
 ]
+
+MODE_OPTIONS = ["Long + Short", "Long uniquement", "Short uniquement"]
 
 st.markdown("""
 <style>
@@ -50,6 +52,10 @@ div[data-testid="stMetricValue"] {color:#EAECEF!important;font-size:1.05rem;}
 </style>
 """, unsafe_allow_html=True)
 
+
+# =========================
+# SECRETS / SUPABASE
+# =========================
 
 def get_secret(name):
     try:
@@ -75,13 +81,16 @@ def supabase_url():
 
 def supabase_headers(prefer=True):
     key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
+
     headers = {
         "apikey": key,
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
+
     if prefer:
         headers["Prefer"] = "return=representation"
+
     return headers
 
 
@@ -91,9 +100,12 @@ def parse_columns(value):
             value = json.loads(value)
         except Exception:
             value = DEFAULT_COLUMNS
+
     if not isinstance(value, list):
         value = DEFAULT_COLUMNS
+
     value = [c for c in value if c in ALL_COLUMNS]
+
     return value if value else DEFAULT_COLUMNS
 
 
@@ -108,22 +120,28 @@ def get_profile(profile_name, pin_hash):
         },
         timeout=20
     )
+
     if response.status_code != 200:
         raise Exception(f"Erreur Supabase lecture {response.status_code}: {response.text}")
+
     data = response.json()
+
     return data[0] if data else None
 
 
 def create_profile(profile_name, pin):
     if not supabase_ready():
         raise Exception("Secrets Supabase absents.")
+
     if not profile_name or not pin:
         raise Exception("Nom de profil et PIN obligatoires.")
+
     if len(pin) < 4:
         raise Exception("Le PIN doit faire au moins 4 caractères.")
 
     pin_hash = hash_pin(pin)
     existing = get_profile(profile_name, pin_hash)
+
     if existing:
         raise Exception("Ce profil existe déjà. Utilise Charger profil.")
 
@@ -144,6 +162,7 @@ def create_profile(profile_name, pin):
         data=json.dumps(payload),
         timeout=20
     )
+
     if response.status_code not in [200, 201]:
         raise Exception(f"Erreur Supabase création {response.status_code}: {response.text}")
 
@@ -153,6 +172,7 @@ def create_profile(profile_name, pin):
 def load_profile(profile_name, pin):
     if not supabase_ready():
         raise Exception("Secrets Supabase absents.")
+
     if not profile_name or not pin:
         raise Exception("Nom de profil et PIN obligatoires.")
 
@@ -168,6 +188,7 @@ def load_profile(profile_name, pin):
 def update_profile(profile_name, pin_hash, payload):
     if not supabase_ready():
         raise Exception("Secrets Supabase absents.")
+
     if not profile_name or not pin_hash:
         raise Exception("Aucun profil connecté.")
 
@@ -191,6 +212,7 @@ def update_profile(profile_name, pin_hash, payload):
         data=json.dumps(clean_payload),
         timeout=20
     )
+
     if response.status_code not in [200, 204]:
         raise Exception(f"Erreur Supabase sauvegarde {response.status_code}: {response.text}")
 
@@ -200,6 +222,7 @@ def update_profile(profile_name, pin_hash, payload):
 def delete_profile(profile_name, pin_hash):
     if not supabase_ready():
         raise Exception("Secrets Supabase absents.")
+
     if not profile_name or not pin_hash:
         raise Exception("Aucun profil connecté.")
 
@@ -212,6 +235,7 @@ def delete_profile(profile_name, pin_hash):
         },
         timeout=20
     )
+
     if response.status_code not in [200, 204]:
         raise Exception(f"Erreur Supabase suppression {response.status_code}: {response.text}")
 
@@ -220,7 +244,12 @@ def delete_profile(profile_name, pin_hash):
 
 def apply_profile_to_session(profile):
     st.session_state["watchlist_input"] = profile.get("watchlist", DEFAULT_WATCHLIST)
-    st.session_state["mode_input"] = profile.get("mode", "Long + Short")
+
+    loaded_mode = profile.get("mode", "Long + Short")
+    if loaded_mode not in MODE_OPTIONS:
+        loaded_mode = "Long + Short"
+
+    st.session_state["mode_input"] = loaded_mode
     st.session_state["stop_input"] = float(profile.get("stop_percent", 1.0))
     st.session_state["max_tokens_input"] = int(profile.get("max_tokens", 10))
     st.session_state["use_futures_confirm_input"] = bool(profile.get("use_futures_confirm", False))
@@ -229,6 +258,10 @@ def apply_profile_to_session(profile):
     st.session_state["logged_profile_name"] = profile.get("profile_name")
     st.session_state["logged_profile_pin_hash"] = profile.get("pin_hash")
 
+
+# =========================
+# SESSION DEFAULTS
+# =========================
 
 for key, value in {
     "watchlist_input": DEFAULT_WATCHLIST,
@@ -244,8 +277,29 @@ for key, value in {
     if key not in st.session_state:
         st.session_state[key] = value
 
+if st.session_state["mode_input"] not in MODE_OPTIONS:
+    st.session_state["mode_input"] = "Long + Short"
 
-st.sidebar.title("Paramètres V9")
+if not isinstance(st.session_state["columns_input"], list):
+    st.session_state["columns_input"] = DEFAULT_COLUMNS
+
+st.session_state["columns_input"] = [
+    c for c in st.session_state["columns_input"]
+    if c in ALL_COLUMNS
+]
+
+if not st.session_state["columns_input"]:
+    st.session_state["columns_input"] = DEFAULT_COLUMNS
+
+st.session_state["stop_input"] = max(0.25, min(5.0, float(st.session_state["stop_input"])))
+st.session_state["max_tokens_input"] = max(5, min(30, int(st.session_state["max_tokens_input"])))
+
+
+# =========================
+# SIDEBAR
+# =========================
+
+st.sidebar.title("Paramètres V9.1")
 
 with st.sidebar.expander("Profil utilisateur", expanded=True):
     if not st.session_state["profile_connected"]:
@@ -264,10 +318,13 @@ with st.sidebar.expander("Profil utilisateur", expanded=True):
                 try:
                     if create_pin != confirm_pin:
                         raise Exception("Les deux PIN ne correspondent pas.")
+
                     profile = create_profile(create_name, create_pin)
                     apply_profile_to_session(profile)
+
                     st.success("Profil créé et connecté.")
                     st.rerun()
+
                 except Exception as e:
                     st.error(str(e))
 
@@ -279,8 +336,10 @@ with st.sidebar.expander("Profil utilisateur", expanded=True):
                 try:
                     profile = load_profile(load_name, load_pin)
                     apply_profile_to_session(profile)
+
                     st.success("Profil chargé.")
                     st.rerun()
+
                 except Exception as e:
                     st.error(str(e))
 
@@ -303,16 +362,24 @@ with st.sidebar.expander("Profil utilisateur", expanded=True):
                         st.session_state["logged_profile_name"],
                         st.session_state["logged_profile_pin_hash"]
                     )
+
                     st.session_state["profile_connected"] = False
                     st.session_state["logged_profile_name"] = None
                     st.session_state["logged_profile_pin_hash"] = None
+
                     st.success("Profil supprimé.")
                     st.rerun()
+
                 except Exception as e:
                     st.error(str(e))
 
+
 with st.sidebar.expander("Watchlist", expanded=False):
-    watchlist = st.text_area("Panier de cryptos", height=180, key="watchlist_input")
+    watchlist = st.text_area(
+        "Panier de cryptos",
+        height=180,
+        key="watchlist_input"
+    )
 
 comparison_label = st.sidebar.selectbox(
     "Temporalité principale",
@@ -321,25 +388,23 @@ comparison_label = st.sidebar.selectbox(
 
 mode = st.sidebar.selectbox(
     "Mode d'analyse",
-    ["Long + Short", "Long uniquement", "Short uniquement"],
+    MODE_OPTIONS,
     key="mode_input"
 )
 
 stop_percent = st.sidebar.slider(
     "Distance stop / invalidation (%)",
-    0.25,
-    5.0,
-    1.0,
-    0.25,
+    min_value=0.25,
+    max_value=5.0,
+    step=0.25,
     key="stop_input"
 )
 
 max_tokens = st.sidebar.slider(
     "Nombre max de cryptos à scanner",
-    5,
-    30,
-    10,
-    1,
+    min_value=5,
+    max_value=30,
+    step=1,
     key="max_tokens_input"
 )
 
@@ -350,7 +415,7 @@ use_futures_confirm = st.sidebar.checkbox(
 
 selected_columns = st.sidebar.multiselect(
     "Colonnes à afficher",
-    ALL_COLUMNS,
+    options=ALL_COLUMNS,
     key="columns_input"
 )
 
@@ -368,12 +433,15 @@ if st.session_state["profile_connected"]:
                 "max_tokens": int(st.session_state["max_tokens_input"]),
                 "use_futures_confirm": bool(st.session_state["use_futures_confirm_input"])
             }
+
             update_profile(
                 st.session_state["logged_profile_name"],
                 st.session_state["logged_profile_pin_hash"],
                 payload
             )
+
             st.sidebar.success("Paramètres sauvegardés.")
+
         except Exception as e:
             st.sidebar.error(str(e))
 else:
@@ -387,7 +455,11 @@ else:
     st.sidebar.caption("Mode stable : PA réelle uniquement. OI + Funding désactivés.")
 
 
-st.title("Crypto Agent IA V9 — Profils + Agent Setup Trading")
+# =========================
+# HEADER
+# =========================
+
+st.title("Crypto Agent IA V9.1 — Profils + Agent Setup Trading")
 
 futures_status = "activés" if use_futures_confirm else "désactivés"
 
@@ -415,14 +487,24 @@ def info_card(title, value, extra=""):
     """, unsafe_allow_html=True)
 
 
+# =========================
+# API COINMARKETCAP
+# =========================
+
 @st.cache_data(ttl=120)
 def fetch_cmc_quotes(symbols_csv, api_key):
     url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
+
     headers = {
         "Accepts": "application/json",
         "X-CMC_PRO_API_KEY": api_key
     }
-    params = {"symbol": symbols_csv, "convert": "USD"}
+
+    params = {
+        "symbol": symbols_csv,
+        "convert": "USD"
+    }
+
     response = requests.get(url, headers=headers, params=params, timeout=20)
 
     if response.status_code != 200:
@@ -447,10 +529,16 @@ def extract_first_coin(data, symbol):
     return item
 
 
+# =========================
+# API COINALYZE
+# =========================
+
 def coinalyze_get(endpoint, params, api_key):
     url = f"https://api.coinalyze.net/v1/{endpoint}"
+
     request_params = dict(params)
     request_params["api_key"] = api_key
+
     response = requests.get(url, params=request_params, timeout=20)
 
     st.session_state[f"debug_last_{endpoint}_status"] = response.status_code
@@ -471,16 +559,25 @@ def fetch_coinalyze_future_markets(api_key):
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
-    return coinalyze_get("funding-rate", {"symbols": symbols_csv}, api_key)
+
+    return coinalyze_get(
+        "funding-rate",
+        {"symbols": symbols_csv},
+        api_key
+    )
 
 
 @st.cache_data(ttl=600)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "open-interest",
-        {"symbols": symbols_csv, "convert_to_usd": "true"},
+        {
+            "symbols": symbols_csv,
+            "convert_to_usd": "true"
+        },
         api_key
     )
 
@@ -489,6 +586,7 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "open-interest-history",
         {
@@ -506,6 +604,7 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
+
     return coinalyze_get(
         "ohlcv-history",
         {
@@ -518,6 +617,10 @@ def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key
     )
 
 
+# =========================
+# TIMEFRAMES
+# =========================
+
 def rounded_now():
     now = int(time.time())
     return now - (now % 300)
@@ -528,14 +631,19 @@ def get_pa_interval_and_range(label):
 
     if label == "1h":
         return "15min", now - 24 * 3600, now
+
     if label == "4h":
         return "15min", now - 2 * 24 * 3600, now
+
     if label == "12h":
         return "15min", now - 3 * 24 * 3600, now
+
     if label == "1 jour":
         return "15min", now - 5 * 24 * 3600, now
+
     if label == "7 jours":
         return "15min", now - 10 * 24 * 3600, now
+
     if label == "30 jours":
         return "15min", now - 20 * 24 * 3600, now
 
@@ -547,8 +655,10 @@ def get_oi_interval_and_range(label):
 
     if label in ["1h", "4h", "12h", "1 jour"]:
         return "1hour", now - 30 * 3600, now
+
     if label == "7 jours":
         return "daily", now - 10 * 24 * 3600, now
+
     if label == "30 jours":
         return "daily", now - 40 * 24 * 3600, now
 
@@ -558,14 +668,22 @@ def get_oi_interval_and_range(label):
 def get_perf_from_quote(quote, label):
     if label in ["1h", "4h", "12h"]:
         return quote.get("percent_change_1h", 0) or 0
+
     if label == "1 jour":
         return quote.get("percent_change_24h", 0) or 0
+
     if label == "7 jours":
         return quote.get("percent_change_7d", 0) or 0
+
     if label == "30 jours":
         return quote.get("percent_change_30d", 0) or 0
+
     return 0
 
+
+# =========================
+# OUTILS
+# =========================
 
 def safe_float(value):
     try:
@@ -576,10 +694,13 @@ def safe_float(value):
 
 def map_list_by_symbol(items):
     result = {}
+
     for item in items:
         symbol = item.get("symbol")
+
         if symbol:
             result[symbol] = item
+
     return result
 
 
@@ -608,9 +729,17 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
         status_text.info(f"Récupération bougies Coinalyze : paquet {chunk_number}/{total_chunks}")
 
         try:
-            data = fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key)
+            data = fetch_coinalyze_ohlcv_history(
+                symbols_csv,
+                interval,
+                from_ts,
+                to_ts,
+                api_key
+            )
+
             if isinstance(data, list):
                 all_data.extend(data)
+
         except Exception as e:
             st.session_state["debug_ohlcv_error"] = str(e)
 
@@ -618,8 +747,13 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
         time.sleep(1.2)
 
     status_text.success("Bougies récupérées.")
+
     return all_data
 
+
+# =========================
+# COINALYZE MATCHING
+# =========================
 
 def select_coinalyze_market(symbol, markets):
     symbol = symbol.upper()
@@ -633,10 +767,13 @@ def select_coinalyze_market(symbol, markets):
 
         if base_asset != symbol:
             continue
+
         if quote_asset not in ["USDT", "USD"]:
             continue
+
         if is_perpetual is not True:
             continue
+
         if margined not in ["STABLE", "USDT", "USD"]:
             continue
 
@@ -651,12 +788,16 @@ def select_coinalyze_market(symbol, markets):
 
         if str(m.get("quote_asset", "")).upper() == "USDT":
             score += 30
+
         if m.get("has_ohlcv_data"):
             score += 30
+
         if m.get("has_buy_sell_data"):
             score += 10
+
         if m.get("has_long_short_ratio_data"):
             score += 10
+
         if m.get("is_perpetual"):
             score += 20
 
@@ -684,13 +825,18 @@ def build_coinalyze_symbol_map(symbols, api_key):
         markets = []
 
     st.session_state["debug_markets_count"] = len(markets)
+
     result = {}
 
     for symbol in symbols:
         market = select_coinalyze_market(symbol, markets)
 
         if market is None:
-            result[symbol] = {"coinalyze_symbol": None, "exchange": "N/A", "raw_market": None}
+            result[symbol] = {
+                "coinalyze_symbol": None,
+                "exchange": "N/A",
+                "raw_market": None
+            }
         else:
             result[symbol] = {
                 "coinalyze_symbol": market.get("symbol"),
@@ -699,8 +845,13 @@ def build_coinalyze_symbol_map(symbols, api_key):
             }
 
     st.session_state["debug_symbol_map"] = result
+
     return result
 
+
+# =========================
+# STRUCTURE / PRICE ACTION
+# =========================
 
 def candles_from_ohlcv_item(ohlcv_item):
     if not ohlcv_item:
@@ -737,14 +888,17 @@ def select_last_hours(candles, hours):
 
     now = int(time.time())
     min_ts = now - hours * 3600
+
     timed = [c for c in candles if c.get("t") is not None]
 
     if timed:
         selected = [c for c in timed if int(c["t"]) >= min_ts]
+
         if len(selected) >= 8:
             return selected
 
     approx_count = max(8, int(hours * 4))
+
     return candles[-approx_count:]
 
 
@@ -882,11 +1036,17 @@ def analyze_structure(candles, label):
 
 def analyze_multi_tf(ohlcv_item):
     candles = candles_from_ohlcv_item(ohlcv_item)
+
     tf_1h = analyze_structure(select_last_hours(candles, 1), "1h")
     tf_4h = analyze_structure(select_last_hours(candles, 4), "4h")
     tf_1d = analyze_structure(select_last_hours(candles, 24), "1j")
+
     return tf_1h, tf_4h, tf_1d, candles
 
+
+# =========================
+# OI / FUNDING
+# =========================
 
 def get_oi_change_from_history(history_item):
     if not history_item:
@@ -905,6 +1065,7 @@ def get_oi_change_from_history(history_item):
             return "N/A"
 
         return round(((last / first) - 1) * 100, 2)
+
     except Exception:
         return "N/A"
 
@@ -920,6 +1081,7 @@ def classify_funding_bias(funding_value):
 
     if value > 0.03:
         return "Long crowded"
+
     if value < -0.02:
         return "Short crowded"
 
@@ -937,6 +1099,7 @@ def classify_oi_bias(oi_change):
 
     if value > 5:
         return "OI en hausse"
+
     if value < -5:
         return "OI en baisse"
 
@@ -997,7 +1160,13 @@ def get_market_data_for_symbols(symbols, api_key):
         interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
 
         try:
-            oi_history = fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key)
+            oi_history = fetch_coinalyze_oi_history(
+                symbols_csv,
+                interval,
+                from_ts,
+                to_ts,
+                api_key
+            )
         except Exception as e:
             st.session_state["debug_oi_history_error"] = str(e)
             oi_history = []
@@ -1005,6 +1174,7 @@ def get_market_data_for_symbols(symbols, api_key):
         funding_data = []
         oi_data = []
         oi_history = []
+
         st.session_state["debug_funding_error"] = "Désactivé"
         st.session_state["debug_oi_error"] = "Désactivé"
         st.session_state["debug_oi_history_error"] = "Désactivé"
@@ -1062,19 +1232,28 @@ def get_market_data_for_symbols(symbols, api_key):
     return result
 
 
+# =========================
+# AGENT
+# =========================
+
 def analyze_relative_strength(perf, btc_perf):
     force = perf - btc_perf
 
     if force > 8:
         return force, "Très forte vs BTC", 25, 0
+
     if force > 3:
         return force, "Forte vs BTC", 18, 2
+
     if force > 0:
         return force, "Légèrement forte vs BTC", 10, 5
+
     if force < -8:
         return force, "Très faible vs BTC", 0, 25
+
     if force < -3:
         return force, "Faible vs BTC", 2, 18
+
     if force < 0:
         return force, "Légèrement faible vs BTC", 5, 10
 
@@ -1089,6 +1268,7 @@ def analyze_volume_momentum(quote):
     perf_7d = quote.get("percent_change_7d", 0) or 0
 
     volume_ratio = round((volume_24h / market_cap) * 100, 2) if market_cap > 0 else "N/A"
+
     score_long = 0
     score_short = 0
 
@@ -1144,12 +1324,14 @@ def detect_advanced_move(direction, perf, tf_main):
     if direction == "LONG":
         if range_position != "N/A" and range_position > 85 and perf > 5:
             return True, "Mouvement déjà avancé"
+
         if breakout == "Breakout" and perf > 8:
             return True, "Breakout déjà loin"
 
     if direction == "SHORT":
         if range_position != "N/A" and range_position < 15 and perf < -5:
             return True, "Mouvement déjà avancé"
+
         if breakout == "Breakdown" and perf < -8:
             return True, "Breakdown déjà loin"
 
@@ -1164,20 +1346,26 @@ def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advan
     if direction == "LONG":
         if "Haussière" in structure:
             risk -= 15
+
         if "forte" in force_label.lower():
             risk -= 10
+
         if range_position != "N/A" and range_position > 85:
             risk += 20
+
         if range_position != "N/A" and 40 <= range_position <= 75:
             risk -= 10
 
     elif direction == "SHORT":
         if "Baissière" in structure:
             risk -= 15
+
         if "faible" in force_label.lower():
             risk -= 10
+
         if range_position != "N/A" and range_position < 15:
             risk += 20
+
         if range_position != "N/A" and 25 <= range_position <= 60:
             risk -= 10
 
@@ -1190,8 +1378,10 @@ def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advan
     if use_futures_confirm:
         if direction == "LONG" and funding_bias == "Long crowded":
             risk += 10
+
         if direction == "SHORT" and funding_bias == "Short crowded":
             risk += 10
+
         if oi_bias == "Neutre":
             risk += 5
 
@@ -1199,8 +1389,10 @@ def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advan
 
     if risk <= 35:
         return risk, f"{risk}/100 — faible"
+
     if risk <= 60:
         return risk, f"{risk}/100 — moyen"
+
     return risk, f"{risk}/100 — élevé"
 
 
@@ -1213,12 +1405,20 @@ def build_trade_plan(direction, price, tf_main):
     if direction == "LONG":
         entry = price * 0.99
         invalidation = entry * (1 - stop_percent / 100)
-        plan = "Attendre pullback long" if range_position != "N/A" and range_position > 85 else "Long possible sur pullback"
+
+        if range_position != "N/A" and range_position > 85:
+            plan = "Attendre pullback long"
+        else:
+            plan = "Long possible sur pullback"
 
     elif direction == "SHORT":
         entry = price * 1.01
         invalidation = entry * (1 + stop_percent / 100)
-        plan = "Attendre rebond short" if range_position != "N/A" and range_position < 15 else "Short possible sur rebond"
+
+        if range_position != "N/A" and range_position < 15:
+            plan = "Attendre rebond short"
+        else:
+            plan = "Short possible sur rebond"
 
     else:
         return "Pas de plan", "N/A", "N/A"
@@ -1238,19 +1438,25 @@ def decide_agent_status(direction, score_long, score_short, tf_1h, tf_4h, advanc
     if direction == "LONG":
         if advanced:
             return "Haussier mais pas tradable", "Le mouvement est déjà avancé."
+
         if score_long >= 115 and aligned_long and risk <= 60:
             return "Tradable long", "Setup long exploitable."
+
         if score_long >= 85:
             return "Setup long en préparation", "Haussier, mais attendre meilleure zone."
+
         return "Haussier faible / pas prioritaire", "Pas assez propre."
 
     if direction == "SHORT":
         if advanced:
             return "Baissier mais pas tradable", "Le mouvement est déjà avancé."
+
         if score_short >= 115 and aligned_short and risk <= 60:
             return "Tradable short", "Setup short exploitable."
+
         if score_short >= 85:
             return "Setup short en préparation", "Baissier, mais attendre meilleure zone."
+
         return "Baissier faible / pas prioritaire", "Pas assez propre."
 
     return "Pas tradable", "Aucun avantage clair."
@@ -1300,7 +1506,12 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
     elif mode == "Short uniquement":
         direction = "SHORT"
     else:
-        direction = "LONG" if score_long > score_short else "SHORT" if score_short > score_long else "NEUTRE"
+        if score_long > score_short:
+            direction = "LONG"
+        elif score_short > score_long:
+            direction = "SHORT"
+        else:
+            direction = "NEUTRE"
 
     advanced, advanced_alert = detect_advanced_move(direction, perf, tf_main)
 
@@ -1348,6 +1559,7 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
         score_agent_bonus = 0
 
     score_agent = round(max(score_long, score_short) - risk_value + score_agent_bonus, 2)
+
     main_reason = f"{status_reason} {force_label}. {volume_momentum['label']}."
 
     if preparation_note:
@@ -1383,6 +1595,10 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
     }
 
 
+# =========================
+# SCAN
+# =========================
+
 if scan_button:
     cmc_api_key = get_secret("CMC_API_KEY")
     coinalyze_api_key = get_secret("COINALYZE_API_KEY")
@@ -1396,7 +1612,11 @@ if scan_button:
 
     symbols = [c.strip().upper() for c in watchlist.split(",") if c.strip()]
     symbols = symbols[:max_tokens]
-    request_symbols = symbols + ["BTC"] if "BTC" not in symbols else symbols
+
+    if "BTC" not in symbols:
+        request_symbols = symbols + ["BTC"]
+    else:
+        request_symbols = symbols
 
     rows = []
     errors = []
@@ -1455,10 +1675,11 @@ if scan_button:
         df = df.sort_values("Top surveillance", ascending=False)
 
         visible_columns = [c for c in selected_columns if c in df.columns]
+
         if not visible_columns:
             visible_columns = [c for c in DEFAULT_COLUMNS if c in df.columns]
 
-        st.subheader("Top coins à surveiller — Agent V9")
+        st.subheader("Top coins à surveiller — Agent V9.1")
         st.dataframe(df[visible_columns], use_container_width=True)
 
         best = df.iloc[0]
@@ -1512,6 +1733,7 @@ if scan_button:
 
     if errors:
         st.subheader("Cryptos non récupérées")
+
         for error in errors:
             st.write(error)
 
@@ -1521,7 +1743,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Crée ou charge un profil, règle tes paramètres, puis lance le scan.</div>
         <div class="small-text">
-            V9 : création de profil séparée, connexion propre, sauvegarde des paramètres, watchlist et colonnes.
+            V9.1 : crash slider corrigé, création de profil séparée, connexion propre, sauvegarde des paramètres, watchlist et colonnes.
         </div>
     </div>
     """, unsafe_allow_html=True)
