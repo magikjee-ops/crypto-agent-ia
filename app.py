@@ -5,7 +5,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Crypto Agent IA V9.1", layout="wide")
+st.set_page_config(page_title="Crypto Agent IA V9.2", layout="wide")
 
 DEFAULT_WATCHLIST = (
     "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
@@ -28,6 +28,69 @@ DEFAULT_COLUMNS = [
     "Zone d’invalidation", "Score risque", "Alerte mouvement avancé", "Décision finale"
 ]
 
+COLUMN_PRESETS = {
+    "Essentiel": [
+        "Crypto",
+        "Top surveillance",
+        "Direction probable",
+        "Statut tradable",
+        "Pourquoi",
+        "Plan",
+        "Entrée idéale",
+        "Zone d’invalidation",
+        "Score risque",
+        "Décision finale"
+    ],
+    "Setup trading": [
+        "Crypto",
+        "Direction probable",
+        "Statut tradable",
+        "Pourquoi",
+        "Structure 1h",
+        "Structure 4h",
+        "Structure 1j",
+        "Force relative vs BTC",
+        "Volume et momentum",
+        "Plan",
+        "Entrée idéale",
+        "Zone d’invalidation",
+        "Alerte mouvement avancé",
+        "Décision finale"
+    ],
+    "Structure": [
+        "Crypto",
+        "Top surveillance",
+        "Structure 1h",
+        "Structure 4h",
+        "Structure 1j",
+        "Force relative vs BTC",
+        "Volume et momentum",
+        "Breakout",
+        "Range position",
+        "Dernière bougie"
+    ],
+    "Risque": [
+        "Crypto",
+        "Direction probable",
+        "Statut tradable",
+        "Score risque",
+        "Alerte mouvement avancé",
+        "Zone d’invalidation",
+        "Pourquoi",
+        "Décision finale"
+    ],
+    "Futures": [
+        "Crypto",
+        "Direction probable",
+        "OI / Funding / Liquidité",
+        "Funding %",
+        "OI variation %",
+        "Score risque",
+        "Décision finale"
+    ],
+    "Complet": ALL_COLUMNS
+}
+
 MODE_OPTIONS = ["Long + Short", "Long uniquement", "Short uniquement"]
 
 st.markdown("""
@@ -44,11 +107,30 @@ div[data-testid="stMetricValue"] {color:#EAECEF!important;font-size:1.05rem;}
 .binance-card-value {color:#EAECEF;font-size:1rem;font-weight:600;}
 .yellow {color:#F0B90B;font-weight:700;}
 .small-text {color:#848E9C;font-size:.88rem;}
-.stButton>button {background-color:#F0B90B;color:#0B0E11;border:none;font-weight:700;border-radius:8px;padding:.6rem 1rem;width:100%;}
+.stButton>button {
+    background-color:#F0B90B;
+    color:#0B0E11;
+    border:none;
+    font-weight:700;
+    border-radius:10px;
+    padding:.55rem .35rem;
+    width:100%;
+    white-space:nowrap;
+    font-size:.82rem;
+}
 .stButton>button:hover {background-color:#FFD33D;color:#0B0E11;border:none;}
 .top-box {background-color:#181A20;border:1px solid #2B3139;border-radius:12px;padding:14px 18px;margin-bottom:16px;}
 .top-title {color:#F0B90B;font-weight:700;font-size:1rem;}
 .top-sub {color:#848E9C;font-size:.9rem;}
+.profile-box {
+    background-color:#123B2A;
+    border:1px solid #1F6B46;
+    border-radius:12px;
+    padding:12px 14px;
+    color:#42F59B;
+    font-weight:700;
+    margin-bottom:10px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -107,6 +189,19 @@ def parse_columns(value):
     value = [c for c in value if c in ALL_COLUMNS]
 
     return value if value else DEFAULT_COLUMNS
+
+
+def detect_columns_preset(columns):
+    columns = parse_columns(columns)
+
+    for preset_name, preset_columns in COLUMN_PRESETS.items():
+        if columns == preset_columns:
+            return preset_name
+
+    if columns == ALL_COLUMNS:
+        return "Complet"
+
+    return "Essentiel"
 
 
 def get_profile(profile_name, pin_hash):
@@ -249,11 +344,14 @@ def apply_profile_to_session(profile):
     if loaded_mode not in MODE_OPTIONS:
         loaded_mode = "Long + Short"
 
+    loaded_columns = parse_columns(profile.get("selected_columns", DEFAULT_COLUMNS))
+
     st.session_state["mode_input"] = loaded_mode
     st.session_state["stop_input"] = float(profile.get("stop_percent", 1.0))
     st.session_state["max_tokens_input"] = int(profile.get("max_tokens", 10))
     st.session_state["use_futures_confirm_input"] = bool(profile.get("use_futures_confirm", False))
-    st.session_state["columns_input"] = parse_columns(profile.get("selected_columns", DEFAULT_COLUMNS))
+    st.session_state["columns_input"] = loaded_columns
+    st.session_state["columns_preset_input"] = detect_columns_preset(loaded_columns)
     st.session_state["profile_connected"] = True
     st.session_state["logged_profile_name"] = profile.get("profile_name")
     st.session_state["logged_profile_pin_hash"] = profile.get("pin_hash")
@@ -270,6 +368,7 @@ for key, value in {
     "max_tokens_input": 10,
     "use_futures_confirm_input": False,
     "columns_input": DEFAULT_COLUMNS,
+    "columns_preset_input": "Essentiel",
     "profile_connected": False,
     "logged_profile_name": None,
     "logged_profile_pin_hash": None,
@@ -291,6 +390,9 @@ st.session_state["columns_input"] = [
 if not st.session_state["columns_input"]:
     st.session_state["columns_input"] = DEFAULT_COLUMNS
 
+if st.session_state["columns_preset_input"] not in COLUMN_PRESETS:
+    st.session_state["columns_preset_input"] = detect_columns_preset(st.session_state["columns_input"])
+
 st.session_state["stop_input"] = max(0.25, min(5.0, float(st.session_state["stop_input"])))
 st.session_state["max_tokens_input"] = max(5, min(30, int(st.session_state["max_tokens_input"])))
 
@@ -299,7 +401,7 @@ st.session_state["max_tokens_input"] = max(5, min(30, int(st.session_state["max_
 # SIDEBAR
 # =========================
 
-st.sidebar.title("Paramètres V9.1")
+st.sidebar.title("Paramètres V9.2")
 
 with st.sidebar.expander("Profil utilisateur", expanded=True):
     if not st.session_state["profile_connected"]:
@@ -344,19 +446,22 @@ with st.sidebar.expander("Profil utilisateur", expanded=True):
                     st.error(str(e))
 
     else:
-        st.success(f"Connecté : {st.session_state['logged_profile_name']}")
+        st.markdown(
+            f"<div class='profile-box'>Connecté : {st.session_state['logged_profile_name']}</div>",
+            unsafe_allow_html=True
+        )
 
-        col_a, col_b = st.columns(2)
+        col_a, col_b = st.columns(2, gap="small")
 
         with col_a:
-            if st.button("Déconnexion"):
+            if st.button("Déconnexion", key="logout_btn"):
                 st.session_state["profile_connected"] = False
                 st.session_state["logged_profile_name"] = None
                 st.session_state["logged_profile_pin_hash"] = None
                 st.rerun()
 
         with col_b:
-            if st.button("Supprimer profil"):
+            if st.button("Supprimer", key="delete_profile_btn"):
                 try:
                     delete_profile(
                         st.session_state["logged_profile_name"],
@@ -413,14 +518,21 @@ use_futures_confirm = st.sidebar.checkbox(
     key="use_futures_confirm_input"
 )
 
-selected_columns = st.sidebar.multiselect(
-    "Colonnes à afficher",
-    options=ALL_COLUMNS,
-    key="columns_input"
+st.sidebar.markdown("### Affichage du tableau")
+
+if st.sidebar.button("Reset tableau complet", key="reset_table_btn"):
+    st.session_state["columns_preset_input"] = "Complet"
+    st.session_state["columns_input"] = ALL_COLUMNS.copy()
+    st.rerun()
+
+display_preset = st.sidebar.selectbox(
+    "Mode d'affichage",
+    options=list(COLUMN_PRESETS.keys()),
+    key="columns_preset_input"
 )
 
-if not selected_columns:
-    selected_columns = DEFAULT_COLUMNS
+selected_columns = COLUMN_PRESETS.get(display_preset, DEFAULT_COLUMNS)
+st.session_state["columns_input"] = selected_columns
 
 if st.session_state["profile_connected"]:
     if st.sidebar.button("Sauvegarder mes paramètres"):
@@ -459,7 +571,7 @@ else:
 # HEADER
 # =========================
 
-st.title("Crypto Agent IA V9.1 — Profils + Agent Setup Trading")
+st.title("Crypto Agent IA V9.2 — Profils + Agent Setup Trading")
 
 futures_status = "activés" if use_futures_confirm else "désactivés"
 
@@ -471,7 +583,8 @@ st.markdown(f"""
         Temporalité : <span class="yellow">{comparison_label}</span> —
         Mode : <span class="yellow">{mode}</span> —
         Stop : <span class="yellow">{stop_percent} %</span> —
-        OI/Funding : <span class="yellow">{futures_status}</span>
+        OI/Funding : <span class="yellow">{futures_status}</span> —
+        Affichage : <span class="yellow">{display_preset}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -1679,7 +1792,7 @@ if scan_button:
         if not visible_columns:
             visible_columns = [c for c in DEFAULT_COLUMNS if c in df.columns]
 
-        st.subheader("Top coins à surveiller — Agent V9.1")
+        st.subheader("Top coins à surveiller — Agent V9.2")
         st.dataframe(df[visible_columns], use_container_width=True)
 
         best = df.iloc[0]
@@ -1743,7 +1856,7 @@ else:
         <div class="binance-card-title">En attente</div>
         <div class="binance-card-value">Crée ou charge un profil, règle tes paramètres, puis lance le scan.</div>
         <div class="small-text">
-            V9.1 : crash slider corrigé, création de profil séparée, connexion propre, sauvegarde des paramètres, watchlist et colonnes.
+            V9.2 : boutons profil corrigés, menu d’affichage simplifié, reset tableau complet.
         </div>
     </div>
     """, unsafe_allow_html=True)
