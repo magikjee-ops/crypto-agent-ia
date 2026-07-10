@@ -5,11 +5,7 @@ import requests
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Crypto Agent IA V8", layout="wide")
-
-# =========================
-# CONFIG COLONNES
-# =========================
+st.set_page_config(page_title="Crypto Agent IA V9", layout="wide")
 
 DEFAULT_WATCHLIST = (
     "ENA, SUI, IMX, NEIRO, AUCTION, PENGU, TON, LINK, ADA, HYPER, TAO, WLFI, "
@@ -17,150 +13,43 @@ DEFAULT_WATCHLIST = (
 )
 
 ALL_COLUMNS = [
-    "Crypto",
-    "Top surveillance",
-    "Direction probable",
-    "Statut tradable",
-    "Pourquoi",
-    "Structure 1h",
-    "Structure 4h",
-    "Structure 1j",
-    "Force relative vs BTC",
-    "Volume et momentum",
-    "OI / Funding / Liquidité",
-    "Plan",
-    "Entrée idéale",
-    "Zone d’invalidation",
-    "Score risque",
-    "Alerte mouvement avancé",
-    "Décision finale",
-    "Prix",
-    "Score Long",
-    "Score Short",
-    "Range position",
-    "Breakout",
-    "Dernière bougie",
-    "Funding %",
-    "OI variation %"
+    "Crypto", "Top surveillance", "Direction probable", "Statut tradable", "Pourquoi",
+    "Structure 1h", "Structure 4h", "Structure 1j", "Force relative vs BTC",
+    "Volume et momentum", "OI / Funding / Liquidité", "Plan", "Entrée idéale",
+    "Zone d’invalidation", "Score risque", "Alerte mouvement avancé", "Décision finale",
+    "Prix", "Score Long", "Score Short", "Range position", "Breakout",
+    "Dernière bougie", "Funding %", "OI variation %"
 ]
 
 DEFAULT_COLUMNS = [
-    "Crypto",
-    "Top surveillance",
-    "Direction probable",
-    "Statut tradable",
-    "Pourquoi",
-    "Structure 1h",
-    "Structure 4h",
-    "Structure 1j",
-    "Force relative vs BTC",
-    "Volume et momentum",
-    "OI / Funding / Liquidité",
-    "Plan",
-    "Entrée idéale",
-    "Zone d’invalidation",
-    "Score risque",
-    "Alerte mouvement avancé",
-    "Décision finale"
+    "Crypto", "Top surveillance", "Direction probable", "Statut tradable", "Pourquoi",
+    "Structure 1h", "Structure 4h", "Structure 1j", "Force relative vs BTC",
+    "Volume et momentum", "OI / Funding / Liquidité", "Plan", "Entrée idéale",
+    "Zone d’invalidation", "Score risque", "Alerte mouvement avancé", "Décision finale"
 ]
-
-
-# =========================
-# STYLE
-# =========================
 
 st.markdown("""
 <style>
-.stApp {
-    background-color: #0B0E11;
-    color: #EAECEF;
-}
-section[data-testid="stSidebar"] {
-    background-color: #181A20;
-    border-right: 1px solid #2B3139;
-}
-h1, h2, h3 {
-    color: #F0B90B !important;
-}
-.block-container {
-    padding-top: 1.5rem;
-}
-div[data-testid="stMetric"] {
-    background-color: #181A20;
-    border: 1px solid #2B3139;
-    padding: 16px;
-    border-radius: 12px;
-}
-div[data-testid="stMetricLabel"] {
-    color: #848E9C !important;
-}
-div[data-testid="stMetricValue"] {
-    color: #EAECEF !important;
-    font-size: 1.05rem;
-}
-.binance-card {
-    background-color: #181A20;
-    border: 1px solid #2B3139;
-    border-radius: 12px;
-    padding: 16px;
-    min-height: 110px;
-    margin-bottom: 12px;
-}
-.binance-card-title {
-    color: #848E9C;
-    font-size: 0.85rem;
-    margin-bottom: 8px;
-}
-.binance-card-value {
-    color: #EAECEF;
-    font-size: 1rem;
-    font-weight: 600;
-}
-.yellow {
-    color: #F0B90B;
-    font-weight: 700;
-}
-.small-text {
-    color: #848E9C;
-    font-size: 0.88rem;
-}
-.stButton > button {
-    background-color: #F0B90B;
-    color: #0B0E11;
-    border: none;
-    font-weight: 700;
-    border-radius: 8px;
-    padding: 0.6rem 1rem;
-    width: 100%;
-}
-.stButton > button:hover {
-    background-color: #FFD33D;
-    color: #0B0E11;
-    border: none;
-}
-.top-box {
-    background-color: #181A20;
-    border: 1px solid #2B3139;
-    border-radius: 12px;
-    padding: 14px 18px;
-    margin-bottom: 16px;
-}
-.top-title {
-    color: #F0B90B;
-    font-weight: 700;
-    font-size: 1rem;
-}
-.top-sub {
-    color: #848E9C;
-    font-size: 0.9rem;
-}
+.stApp {background-color:#0B0E11;color:#EAECEF;}
+section[data-testid="stSidebar"] {background-color:#181A20;border-right:1px solid #2B3139;}
+h1,h2,h3 {color:#F0B90B!important;}
+.block-container {padding-top:1.5rem;}
+div[data-testid="stMetric"] {background-color:#181A20;border:1px solid #2B3139;padding:16px;border-radius:12px;}
+div[data-testid="stMetricLabel"] {color:#848E9C!important;}
+div[data-testid="stMetricValue"] {color:#EAECEF!important;font-size:1.05rem;}
+.binance-card {background-color:#181A20;border:1px solid #2B3139;border-radius:12px;padding:16px;min-height:110px;margin-bottom:12px;}
+.binance-card-title {color:#848E9C;font-size:.85rem;margin-bottom:8px;}
+.binance-card-value {color:#EAECEF;font-size:1rem;font-weight:600;}
+.yellow {color:#F0B90B;font-weight:700;}
+.small-text {color:#848E9C;font-size:.88rem;}
+.stButton>button {background-color:#F0B90B;color:#0B0E11;border:none;font-weight:700;border-radius:8px;padding:.6rem 1rem;width:100%;}
+.stButton>button:hover {background-color:#FFD33D;color:#0B0E11;border:none;}
+.top-box {background-color:#181A20;border:1px solid #2B3139;border-radius:12px;padding:14px 18px;margin-bottom:16px;}
+.top-title {color:#F0B90B;font-weight:700;font-size:1rem;}
+.top-sub {color:#848E9C;font-size:.9rem;}
 </style>
 """, unsafe_allow_html=True)
 
-
-# =========================
-# SECRETS
-# =========================
 
 def get_secret(name):
     try:
@@ -169,98 +58,120 @@ def get_secret(name):
         return None
 
 
-# =========================
-# SUPABASE PROFILS
-# =========================
-
 def hash_pin(pin):
     return hashlib.sha256(pin.encode("utf-8")).hexdigest()
-
-
-def supabase_headers():
-    key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
-    return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=representation"
-    }
-
-
-def supabase_base_url():
-    url = get_secret("SUPABASE_URL")
-    if not url:
-        return None
-    return url.rstrip("/") + "/rest/v1/trading_profiles"
 
 
 def supabase_ready():
     return bool(get_secret("SUPABASE_URL")) and bool(get_secret("SUPABASE_SERVICE_ROLE_KEY"))
 
 
-def load_profile(profile_name, pin):
-    if not supabase_ready():
-        raise Exception("Secrets Supabase absents.")
+def supabase_url():
+    base = get_secret("SUPABASE_URL")
+    if not base:
+        return None
+    return base.rstrip("/") + "/rest/v1/trading_profiles"
 
-    if not profile_name or not pin:
-        raise Exception("Nom de profil et PIN obligatoires.")
 
-    pin_hash = hash_pin(pin)
-    url = supabase_base_url()
-
-    params = {
-        "profile_name": f"eq.{profile_name}",
-        "pin_hash": f"eq.{pin_hash}",
-        "select": "*"
+def supabase_headers(prefer=True):
+    key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
     }
+    if prefer:
+        headers["Prefer"] = "return=representation"
+    return headers
 
+
+def parse_columns(value):
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except Exception:
+            value = DEFAULT_COLUMNS
+    if not isinstance(value, list):
+        value = DEFAULT_COLUMNS
+    value = [c for c in value if c in ALL_COLUMNS]
+    return value if value else DEFAULT_COLUMNS
+
+
+def get_profile(profile_name, pin_hash):
     response = requests.get(
-        url,
-        headers=supabase_headers(),
-        params=params,
-        timeout=20
-    )
-
-    if response.status_code != 200:
-        raise Exception(f"Erreur Supabase load {response.status_code}: {response.text}")
-
-    data = response.json()
-
-    if not data:
-        raise Exception("Profil introuvable ou PIN incorrect.")
-
-    return data[0]
-
-
-def save_profile(profile_name, pin, payload):
-    if not supabase_ready():
-        raise Exception("Secrets Supabase absents.")
-
-    if not profile_name or not pin:
-        raise Exception("Nom de profil et PIN obligatoires.")
-
-    pin_hash = hash_pin(pin)
-    url = supabase_base_url()
-
-    existing = requests.get(
-        url,
+        supabase_url(),
         headers=supabase_headers(),
         params={
             "profile_name": f"eq.{profile_name}",
             "pin_hash": f"eq.{pin_hash}",
-            "select": "id"
+            "select": "*"
         },
         timeout=20
     )
+    if response.status_code != 200:
+        raise Exception(f"Erreur Supabase lecture {response.status_code}: {response.text}")
+    data = response.json()
+    return data[0] if data else None
 
-    if existing.status_code != 200:
-        raise Exception(f"Erreur Supabase check {existing.status_code}: {existing.text}")
 
-    existing_data = existing.json()
+def create_profile(profile_name, pin):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+    if not profile_name or not pin:
+        raise Exception("Nom de profil et PIN obligatoires.")
+    if len(pin) < 4:
+        raise Exception("Le PIN doit faire au moins 4 caractères.")
 
-    clean_payload = {
+    pin_hash = hash_pin(pin)
+    existing = get_profile(profile_name, pin_hash)
+    if existing:
+        raise Exception("Ce profil existe déjà. Utilise Charger profil.")
+
+    payload = {
         "profile_name": profile_name,
         "pin_hash": pin_hash,
+        "watchlist": DEFAULT_WATCHLIST,
+        "selected_columns": DEFAULT_COLUMNS,
+        "mode": "Long + Short",
+        "stop_percent": 1.0,
+        "max_tokens": 10,
+        "use_futures_confirm": False,
+    }
+
+    response = requests.post(
+        supabase_url(),
+        headers=supabase_headers(),
+        data=json.dumps(payload),
+        timeout=20
+    )
+    if response.status_code not in [200, 201]:
+        raise Exception(f"Erreur Supabase création {response.status_code}: {response.text}")
+
+    return response.json()[0]
+
+
+def load_profile(profile_name, pin):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+    if not profile_name or not pin:
+        raise Exception("Nom de profil et PIN obligatoires.")
+
+    pin_hash = hash_pin(pin)
+    profile = get_profile(profile_name, pin_hash)
+
+    if not profile:
+        raise Exception("Profil introuvable ou PIN incorrect.")
+
+    return profile
+
+
+def update_profile(profile_name, pin_hash, payload):
+    if not supabase_ready():
+        raise Exception("Secrets Supabase absents.")
+    if not profile_name or not pin_hash:
+        raise Exception("Aucun profil connecté.")
+
+    clean_payload = {
         "watchlist": payload["watchlist"],
         "selected_columns": payload["selected_columns"],
         "mode": payload["mode"],
@@ -270,144 +181,138 @@ def save_profile(profile_name, pin, payload):
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     }
 
-    if existing_data:
-        profile_id = existing_data[0]["id"]
+    response = requests.patch(
+        supabase_url(),
+        headers=supabase_headers(),
+        params={
+            "profile_name": f"eq.{profile_name}",
+            "pin_hash": f"eq.{pin_hash}"
+        },
+        data=json.dumps(clean_payload),
+        timeout=20
+    )
+    if response.status_code not in [200, 204]:
+        raise Exception(f"Erreur Supabase sauvegarde {response.status_code}: {response.text}")
 
-        response = requests.patch(
-            url,
-            headers=supabase_headers(),
-            params={"id": f"eq.{profile_id}"},
-            data=json.dumps(clean_payload),
-            timeout=20
-        )
-    else:
-        response = requests.post(
-            url,
-            headers=supabase_headers(),
-            data=json.dumps(clean_payload),
-            timeout=20
-        )
-
-    if response.status_code not in [200, 201]:
-        raise Exception(f"Erreur Supabase save {response.status_code}: {response.text}")
-
-    return response.json()
+    return True
 
 
-def delete_profile(profile_name, pin):
+def delete_profile(profile_name, pin_hash):
     if not supabase_ready():
         raise Exception("Secrets Supabase absents.")
-
-    if not profile_name or not pin:
-        raise Exception("Nom de profil et PIN obligatoires.")
-
-    pin_hash = hash_pin(pin)
-    url = supabase_base_url()
+    if not profile_name or not pin_hash:
+        raise Exception("Aucun profil connecté.")
 
     response = requests.delete(
-        url,
-        headers=supabase_headers(),
+        supabase_url(),
+        headers=supabase_headers(False),
         params={
             "profile_name": f"eq.{profile_name}",
             "pin_hash": f"eq.{pin_hash}"
         },
         timeout=20
     )
-
     if response.status_code not in [200, 204]:
-        raise Exception(f"Erreur Supabase delete {response.status_code}: {response.text}")
+        raise Exception(f"Erreur Supabase suppression {response.status_code}: {response.text}")
 
     return True
 
 
-# =========================
-# SESSION DEFAULTS
-# =========================
-
-if "watchlist_input" not in st.session_state:
-    st.session_state["watchlist_input"] = DEFAULT_WATCHLIST
-
-if "mode_input" not in st.session_state:
-    st.session_state["mode_input"] = "Long + Short"
-
-if "stop_input" not in st.session_state:
-    st.session_state["stop_input"] = 1.0
-
-if "max_tokens_input" not in st.session_state:
-    st.session_state["max_tokens_input"] = 10
-
-if "use_futures_confirm_input" not in st.session_state:
-    st.session_state["use_futures_confirm_input"] = False
-
-if "columns_input" not in st.session_state:
-    st.session_state["columns_input"] = DEFAULT_COLUMNS
+def apply_profile_to_session(profile):
+    st.session_state["watchlist_input"] = profile.get("watchlist", DEFAULT_WATCHLIST)
+    st.session_state["mode_input"] = profile.get("mode", "Long + Short")
+    st.session_state["stop_input"] = float(profile.get("stop_percent", 1.0))
+    st.session_state["max_tokens_input"] = int(profile.get("max_tokens", 10))
+    st.session_state["use_futures_confirm_input"] = bool(profile.get("use_futures_confirm", False))
+    st.session_state["columns_input"] = parse_columns(profile.get("selected_columns", DEFAULT_COLUMNS))
+    st.session_state["profile_connected"] = True
+    st.session_state["logged_profile_name"] = profile.get("profile_name")
+    st.session_state["logged_profile_pin_hash"] = profile.get("pin_hash")
 
 
-# =========================
-# SIDEBAR
-# =========================
+for key, value in {
+    "watchlist_input": DEFAULT_WATCHLIST,
+    "mode_input": "Long + Short",
+    "stop_input": 1.0,
+    "max_tokens_input": 10,
+    "use_futures_confirm_input": False,
+    "columns_input": DEFAULT_COLUMNS,
+    "profile_connected": False,
+    "logged_profile_name": None,
+    "logged_profile_pin_hash": None,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
-st.sidebar.title("Paramètres V8")
+
+st.sidebar.title("Paramètres V9")
 
 with st.sidebar.expander("Profil utilisateur", expanded=True):
-    profile_name = st.text_input("Nom du profil", key="profile_name_input")
-    profile_pin = st.text_input("Code PIN", type="password", key="profile_pin_input")
+    if not st.session_state["profile_connected"]:
+        profile_action = st.radio(
+            "Action",
+            ["Créer un profil", "Charger un profil existant"],
+            horizontal=False
+        )
 
-    col_load, col_delete = st.columns(2)
+        if profile_action == "Créer un profil":
+            create_name = st.text_input("Nom du nouveau profil", key="create_profile_name")
+            create_pin = st.text_input("Créer un PIN", type="password", key="create_profile_pin")
+            confirm_pin = st.text_input("Confirmer le PIN", type="password", key="confirm_profile_pin")
 
-    with col_load:
-        load_button = st.button("Charger")
-
-    with col_delete:
-        delete_button = st.button("Supprimer")
-
-    if load_button:
-        try:
-            profile = load_profile(profile_name, profile_pin)
-
-            st.session_state["watchlist_input"] = profile.get("watchlist", DEFAULT_WATCHLIST)
-            st.session_state["mode_input"] = profile.get("mode", "Long + Short")
-            st.session_state["stop_input"] = float(profile.get("stop_percent", 1.0))
-            st.session_state["max_tokens_input"] = int(profile.get("max_tokens", 10))
-            st.session_state["use_futures_confirm_input"] = bool(profile.get("use_futures_confirm", False))
-
-            loaded_columns = profile.get("selected_columns", DEFAULT_COLUMNS)
-
-            if isinstance(loaded_columns, str):
+            if st.button("Créer le profil"):
                 try:
-                    loaded_columns = json.loads(loaded_columns)
-                except Exception:
-                    loaded_columns = DEFAULT_COLUMNS
+                    if create_pin != confirm_pin:
+                        raise Exception("Les deux PIN ne correspondent pas.")
+                    profile = create_profile(create_name, create_pin)
+                    apply_profile_to_session(profile)
+                    st.success("Profil créé et connecté.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
-            loaded_columns = [c for c in loaded_columns if c in ALL_COLUMNS]
+        else:
+            load_name = st.text_input("Nom du profil", key="load_profile_name")
+            load_pin = st.text_input("PIN", type="password", key="load_profile_pin")
 
-            if not loaded_columns:
-                loaded_columns = DEFAULT_COLUMNS
+            if st.button("Charger le profil"):
+                try:
+                    profile = load_profile(load_name, load_pin)
+                    apply_profile_to_session(profile)
+                    st.success("Profil chargé.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
-            st.session_state["columns_input"] = loaded_columns
-            st.session_state["profile_loaded_message"] = f"Profil chargé : {profile_name}"
+    else:
+        st.success(f"Connecté : {st.session_state['logged_profile_name']}")
 
-            st.rerun()
+        col_a, col_b = st.columns(2)
 
-        except Exception as e:
-            st.error(str(e))
+        with col_a:
+            if st.button("Déconnexion"):
+                st.session_state["profile_connected"] = False
+                st.session_state["logged_profile_name"] = None
+                st.session_state["logged_profile_pin_hash"] = None
+                st.rerun()
 
-    if delete_button:
-        try:
-            delete_profile(profile_name, profile_pin)
-            st.success("Profil supprimé.")
-        except Exception as e:
-            st.error(str(e))
-
-if "profile_loaded_message" in st.session_state:
-    st.sidebar.success(st.session_state["profile_loaded_message"])
+        with col_b:
+            if st.button("Supprimer profil"):
+                try:
+                    delete_profile(
+                        st.session_state["logged_profile_name"],
+                        st.session_state["logged_profile_pin_hash"]
+                    )
+                    st.session_state["profile_connected"] = False
+                    st.session_state["logged_profile_name"] = None
+                    st.session_state["logged_profile_pin_hash"] = None
+                    st.success("Profil supprimé.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
 
 with st.sidebar.expander("Watchlist", expanded=False):
-    watchlist = st.text_area(
-        "Panier de cryptos",
-        height=180,
-        key="watchlist_input"
-    )
+    watchlist = st.text_area("Panier de cryptos", height=180, key="watchlist_input")
 
 comparison_label = st.sidebar.selectbox(
     "Temporalité principale",
@@ -452,24 +357,27 @@ selected_columns = st.sidebar.multiselect(
 if not selected_columns:
     selected_columns = DEFAULT_COLUMNS
 
-save_button = st.sidebar.button("Sauvegarder profil")
-
-if save_button:
-    try:
-        payload = {
-            "watchlist": st.session_state["watchlist_input"],
-            "selected_columns": selected_columns,
-            "mode": st.session_state["mode_input"],
-            "stop_percent": float(st.session_state["stop_input"]),
-            "max_tokens": int(st.session_state["max_tokens_input"]),
-            "use_futures_confirm": bool(st.session_state["use_futures_confirm_input"])
-        }
-
-        save_profile(profile_name, profile_pin, payload)
-        st.sidebar.success("Profil sauvegardé.")
-
-    except Exception as e:
-        st.sidebar.error(str(e))
+if st.session_state["profile_connected"]:
+    if st.sidebar.button("Sauvegarder mes paramètres"):
+        try:
+            payload = {
+                "watchlist": st.session_state["watchlist_input"],
+                "selected_columns": selected_columns,
+                "mode": st.session_state["mode_input"],
+                "stop_percent": float(st.session_state["stop_input"]),
+                "max_tokens": int(st.session_state["max_tokens_input"]),
+                "use_futures_confirm": bool(st.session_state["use_futures_confirm_input"])
+            }
+            update_profile(
+                st.session_state["logged_profile_name"],
+                st.session_state["logged_profile_pin_hash"],
+                payload
+            )
+            st.sidebar.success("Paramètres sauvegardés.")
+        except Exception as e:
+            st.sidebar.error(str(e))
+else:
+    st.sidebar.info("Crée ou charge un profil pour sauvegarder tes paramètres.")
 
 scan_button = st.sidebar.button("Scanner maintenant")
 
@@ -479,20 +387,16 @@ else:
     st.sidebar.caption("Mode stable : PA réelle uniquement. OI + Funding désactivés.")
 
 
-# =========================
-# HEADER
-# =========================
-
-st.title("Crypto Agent IA V8 — Profils + Agent Setup Trading")
+st.title("Crypto Agent IA V9 — Profils + Agent Setup Trading")
 
 futures_status = "activés" if use_futures_confirm else "désactivés"
 
 st.markdown(f"""
 <div class="top-box">
-    <div class="top-title">Scanner de setups — profils sauvegardés</div>
+    <div class="top-title">Scanner de setups — profils propres</div>
     <div class="top-sub">
-        Critères : <span class="yellow">structure 1h/4h/1j, force BTC, volume, momentum, tradabilité, risque, invalidation</span><br>
-        Temporalité principale : <span class="yellow">{comparison_label}</span> —
+        Profil : <span class="yellow">{st.session_state["logged_profile_name"] or "non connecté"}</span><br>
+        Temporalité : <span class="yellow">{comparison_label}</span> —
         Mode : <span class="yellow">{mode}</span> —
         Stop : <span class="yellow">{stop_percent} %</span> —
         OI/Funding : <span class="yellow">{futures_status}</span>
@@ -500,10 +404,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
-# =========================
-# AFFICHAGE
-# =========================
 
 def info_card(title, value, extra=""):
     st.markdown(f"""
@@ -515,24 +415,14 @@ def info_card(title, value, extra=""):
     """, unsafe_allow_html=True)
 
 
-# =========================
-# API COINMARKETCAP
-# =========================
-
 @st.cache_data(ttl=120)
 def fetch_cmc_quotes(symbols_csv, api_key):
     url = "https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest"
-
     headers = {
         "Accepts": "application/json",
         "X-CMC_PRO_API_KEY": api_key
     }
-
-    params = {
-        "symbol": symbols_csv,
-        "convert": "USD"
-    }
-
+    params = {"symbol": symbols_csv, "convert": "USD"}
     response = requests.get(url, headers=headers, params=params, timeout=20)
 
     if response.status_code != 200:
@@ -557,17 +447,10 @@ def extract_first_coin(data, symbol):
     return item
 
 
-# =========================
-# API COINALYZE
-# =========================
-
 def coinalyze_get(endpoint, params, api_key):
-    base_url = "https://api.coinalyze.net/v1"
-    url = f"{base_url}/{endpoint}"
-
+    url = f"https://api.coinalyze.net/v1/{endpoint}"
     request_params = dict(params)
     request_params["api_key"] = api_key
-
     response = requests.get(url, params=request_params, timeout=20)
 
     st.session_state[f"debug_last_{endpoint}_status"] = response.status_code
@@ -588,25 +471,16 @@ def fetch_coinalyze_future_markets(api_key):
 def fetch_coinalyze_funding(symbols_csv, api_key):
     if not symbols_csv:
         return []
-
-    return coinalyze_get(
-        "funding-rate",
-        {"symbols": symbols_csv},
-        api_key
-    )
+    return coinalyze_get("funding-rate", {"symbols": symbols_csv}, api_key)
 
 
 @st.cache_data(ttl=600)
 def fetch_coinalyze_open_interest(symbols_csv, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "open-interest",
-        {
-            "symbols": symbols_csv,
-            "convert_to_usd": "true"
-        },
+        {"symbols": symbols_csv, "convert_to_usd": "true"},
         api_key
     )
 
@@ -615,7 +489,6 @@ def fetch_coinalyze_open_interest(symbols_csv, api_key):
 def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "open-interest-history",
         {
@@ -633,7 +506,6 @@ def fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key):
 def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key):
     if not symbols_csv:
         return []
-
     return coinalyze_get(
         "ohlcv-history",
         {
@@ -646,73 +518,54 @@ def fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key
     )
 
 
-# =========================
-# TIMEFRAMES
-# =========================
-
 def rounded_now():
     now = int(time.time())
     return now - (now % 300)
 
 
-def get_pa_interval_and_range(comparison_label):
+def get_pa_interval_and_range(label):
     now = rounded_now()
 
-    if comparison_label == "1h":
+    if label == "1h":
         return "15min", now - 24 * 3600, now
-
-    if comparison_label == "4h":
+    if label == "4h":
         return "15min", now - 2 * 24 * 3600, now
-
-    if comparison_label == "12h":
+    if label == "12h":
         return "15min", now - 3 * 24 * 3600, now
-
-    if comparison_label == "1 jour":
+    if label == "1 jour":
         return "15min", now - 5 * 24 * 3600, now
-
-    if comparison_label == "7 jours":
+    if label == "7 jours":
         return "15min", now - 10 * 24 * 3600, now
-
-    if comparison_label == "30 jours":
+    if label == "30 jours":
         return "15min", now - 20 * 24 * 3600, now
 
     return "15min", now - 24 * 3600, now
 
 
-def get_oi_interval_and_range(comparison_label):
+def get_oi_interval_and_range(label):
     now = rounded_now()
 
-    if comparison_label in ["1h", "4h", "12h", "1 jour"]:
+    if label in ["1h", "4h", "12h", "1 jour"]:
         return "1hour", now - 30 * 3600, now
-
-    if comparison_label == "7 jours":
+    if label == "7 jours":
         return "daily", now - 10 * 24 * 3600, now
-
-    if comparison_label == "30 jours":
+    if label == "30 jours":
         return "daily", now - 40 * 24 * 3600, now
 
     return "1hour", now - 30 * 3600, now
 
 
-def get_perf_from_quote(quote, comparison_label):
-    if comparison_label in ["1h", "4h", "12h"]:
+def get_perf_from_quote(quote, label):
+    if label in ["1h", "4h", "12h"]:
         return quote.get("percent_change_1h", 0) or 0
-
-    if comparison_label == "1 jour":
+    if label == "1 jour":
         return quote.get("percent_change_24h", 0) or 0
-
-    if comparison_label == "7 jours":
+    if label == "7 jours":
         return quote.get("percent_change_7d", 0) or 0
-
-    if comparison_label == "30 jours":
+    if label == "30 jours":
         return quote.get("percent_change_30d", 0) or 0
-
     return 0
 
-
-# =========================
-# OUTILS
-# =========================
 
 def safe_float(value):
     try:
@@ -723,12 +576,10 @@ def safe_float(value):
 
 def map_list_by_symbol(items):
     result = {}
-
     for item in items:
         symbol = item.get("symbol")
         if symbol:
             result[symbol] = item
-
     return result
 
 
@@ -754,36 +605,21 @@ def fetch_ohlcv_in_chunks(coinalyze_symbols, api_key):
         chunk = coinalyze_symbols[i:i + chunk_size]
         symbols_csv = ",".join(chunk)
 
-        status_text.info(
-            f"Récupération des bougies Coinalyze : paquet {chunk_number}/{total_chunks} — {', '.join(chunk)}"
-        )
+        status_text.info(f"Récupération bougies Coinalyze : paquet {chunk_number}/{total_chunks}")
 
         try:
-            data = fetch_coinalyze_ohlcv_history(
-                symbols_csv,
-                interval,
-                from_ts,
-                to_ts,
-                api_key
-            )
-
+            data = fetch_coinalyze_ohlcv_history(symbols_csv, interval, from_ts, to_ts, api_key)
             if isinstance(data, list):
                 all_data.extend(data)
-
         except Exception as e:
             st.session_state["debug_ohlcv_error"] = str(e)
 
         progress_bar.progress(chunk_number / total_chunks)
         time.sleep(1.2)
 
-    status_text.success("Bougies Coinalyze récupérées par paquets de 5.")
-
+    status_text.success("Bougies récupérées.")
     return all_data
 
-
-# =========================
-# MATCHING COINALYZE
-# =========================
 
 def select_coinalyze_market(symbol, markets):
     symbol = symbol.upper()
@@ -797,13 +633,10 @@ def select_coinalyze_market(symbol, markets):
 
         if base_asset != symbol:
             continue
-
         if quote_asset not in ["USDT", "USD"]:
             continue
-
         if is_perpetual is not True:
             continue
-
         if margined not in ["STABLE", "USDT", "USD"]:
             continue
 
@@ -814,21 +647,16 @@ def select_coinalyze_market(symbol, markets):
 
     def score_market(m):
         exchange = str(m.get("exchange", "")).lower()
-        quote_asset = str(m.get("quote_asset", "")).upper()
         score = 0
 
-        if quote_asset == "USDT":
+        if str(m.get("quote_asset", "")).upper() == "USDT":
             score += 30
-
         if m.get("has_ohlcv_data"):
             score += 30
-
         if m.get("has_buy_sell_data"):
             score += 10
-
         if m.get("has_long_short_ratio_data"):
             score += 10
-
         if m.get("is_perpetual"):
             score += 20
 
@@ -845,8 +673,7 @@ def select_coinalyze_market(symbol, markets):
 
         return score
 
-    candidates = sorted(candidates, key=score_market, reverse=True)
-    return candidates[0]
+    return sorted(candidates, key=score_market, reverse=True)[0]
 
 
 def build_coinalyze_symbol_map(symbols, api_key):
@@ -857,19 +684,13 @@ def build_coinalyze_symbol_map(symbols, api_key):
         markets = []
 
     st.session_state["debug_markets_count"] = len(markets)
-    st.session_state["debug_markets_sample"] = markets[:5] if isinstance(markets, list) else markets
-
     result = {}
 
     for symbol in symbols:
         market = select_coinalyze_market(symbol, markets)
 
         if market is None:
-            result[symbol] = {
-                "coinalyze_symbol": None,
-                "exchange": "N/A",
-                "raw_market": None
-            }
+            result[symbol] = {"coinalyze_symbol": None, "exchange": "N/A", "raw_market": None}
         else:
             result[symbol] = {
                 "coinalyze_symbol": market.get("symbol"),
@@ -878,22 +699,16 @@ def build_coinalyze_symbol_map(symbols, api_key):
             }
 
     st.session_state["debug_symbol_map"] = result
-
     return result
 
-
-# =========================
-# OHLCV / STRUCTURE
-# =========================
 
 def candles_from_ohlcv_item(ohlcv_item):
     if not ohlcv_item:
         return []
 
-    history = ohlcv_item.get("history", [])
     candles = []
 
-    for c in history:
+    for c in ohlcv_item.get("history", []):
         o = safe_float(c.get("o"))
         h = safe_float(c.get("h"))
         l = safe_float(c.get("l"))
@@ -922,7 +737,6 @@ def select_last_hours(candles, hours):
 
     now = int(time.time())
     min_ts = now - hours * 3600
-
     timed = [c for c in candles if c.get("t") is not None]
 
     if timed:
@@ -959,8 +773,8 @@ def analyze_structure(candles, label):
     low_range = min(lows)
     close = last["c"]
 
-    first_half = candles[:len(candles)//2]
-    second_half = candles[len(candles)//2:]
+    first_half = candles[:len(candles) // 2]
+    second_half = candles[len(candles) // 2:]
 
     first_high = max([x["h"] for x in first_half])
     second_high = max([x["h"] for x in second_half])
@@ -1022,11 +836,7 @@ def analyze_structure(candles, label):
 
     body = abs(last["c"] - last["o"])
     candle_range = last["h"] - last["l"]
-
-    if candle_range > 0:
-        body_ratio = body / candle_range
-    else:
-        body_ratio = 0
+    body_ratio = body / candle_range if candle_range > 0 else 0
 
     if last["c"] > last["o"] and body_ratio > 0.55:
         last_candle = "Impulsion verte"
@@ -1055,11 +865,7 @@ def analyze_structure(candles, label):
 
     recent_range = max([x["h"] for x in candles[-8:]]) - min([x["l"] for x in candles[-8:]])
     global_range = high_range - low_range
-
-    compression = False
-
-    if global_range > 0 and recent_range / global_range < 0.35:
-        compression = True
+    compression = global_range > 0 and recent_range / global_range < 0.35
 
     return {
         "label": label,
@@ -1076,17 +882,11 @@ def analyze_structure(candles, label):
 
 def analyze_multi_tf(ohlcv_item):
     candles = candles_from_ohlcv_item(ohlcv_item)
-
     tf_1h = analyze_structure(select_last_hours(candles, 1), "1h")
     tf_4h = analyze_structure(select_last_hours(candles, 4), "4h")
     tf_1d = analyze_structure(select_last_hours(candles, 24), "1j")
-
     return tf_1h, tf_4h, tf_1d, candles
 
-
-# =========================
-# OI / FUNDING
-# =========================
 
 def get_oi_change_from_history(history_item):
     if not history_item:
@@ -1097,18 +897,14 @@ def get_oi_change_from_history(history_item):
     if not history or len(history) < 2:
         return "N/A"
 
-    first = history[0].get("c")
-    last = history[-1].get("c")
-
     try:
-        first = float(first)
-        last = float(last)
+        first = float(history[0].get("c"))
+        last = float(history[-1].get("c"))
 
         if first == 0:
             return "N/A"
 
         return round(((last / first) - 1) * 100, 2)
-
     except Exception:
         return "N/A"
 
@@ -1124,7 +920,6 @@ def classify_funding_bias(funding_value):
 
     if value > 0.03:
         return "Long crowded"
-
     if value < -0.02:
         return "Short crowded"
 
@@ -1142,7 +937,6 @@ def classify_oi_bias(oi_change):
 
     if value > 5:
         return "OI en hausse"
-
     if value < -5:
         return "OI en baisse"
 
@@ -1203,13 +997,7 @@ def get_market_data_for_symbols(symbols, api_key):
         interval, from_ts, to_ts = get_oi_interval_and_range(comparison_label)
 
         try:
-            oi_history = fetch_coinalyze_oi_history(
-                symbols_csv,
-                interval,
-                from_ts,
-                to_ts,
-                api_key
-            )
+            oi_history = fetch_coinalyze_oi_history(symbols_csv, interval, from_ts, to_ts, api_key)
         except Exception as e:
             st.session_state["debug_oi_history_error"] = str(e)
             oi_history = []
@@ -1217,7 +1005,6 @@ def get_market_data_for_symbols(symbols, api_key):
         funding_data = []
         oi_data = []
         oi_history = []
-
         st.session_state["debug_funding_error"] = "Désactivé"
         st.session_state["debug_oi_error"] = "Désactivé"
         st.session_state["debug_oi_history_error"] = "Désactivé"
@@ -1275,58 +1062,33 @@ def get_market_data_for_symbols(symbols, api_key):
     return result
 
 
-# =========================
-# AGENT V8
-# =========================
-
 def analyze_relative_strength(perf, btc_perf):
     force = perf - btc_perf
 
     if force > 8:
-        label = "Très forte vs BTC"
-        score_long = 25
-        score_short = 0
-    elif force > 3:
-        label = "Forte vs BTC"
-        score_long = 18
-        score_short = 2
-    elif force > 0:
-        label = "Légèrement forte vs BTC"
-        score_long = 10
-        score_short = 5
-    elif force < -8:
-        label = "Très faible vs BTC"
-        score_long = 0
-        score_short = 25
-    elif force < -3:
-        label = "Faible vs BTC"
-        score_long = 2
-        score_short = 18
-    elif force < 0:
-        label = "Légèrement faible vs BTC"
-        score_long = 5
-        score_short = 10
-    else:
-        label = "Neutre vs BTC"
-        score_long = 6
-        score_short = 6
+        return force, "Très forte vs BTC", 25, 0
+    if force > 3:
+        return force, "Forte vs BTC", 18, 2
+    if force > 0:
+        return force, "Légèrement forte vs BTC", 10, 5
+    if force < -8:
+        return force, "Très faible vs BTC", 0, 25
+    if force < -3:
+        return force, "Faible vs BTC", 2, 18
+    if force < 0:
+        return force, "Légèrement faible vs BTC", 5, 10
 
-    return force, label, score_long, score_short
+    return force, "Neutre vs BTC", 6, 6
 
 
 def analyze_volume_momentum(quote):
     volume_24h = quote.get("volume_24h", 0) or 0
     market_cap = quote.get("market_cap", 0) or 0
-
     perf_1h = quote.get("percent_change_1h", 0) or 0
     perf_24h = quote.get("percent_change_24h", 0) or 0
     perf_7d = quote.get("percent_change_7d", 0) or 0
 
-    if market_cap > 0:
-        volume_ratio = round((volume_24h / market_cap) * 100, 2)
-    else:
-        volume_ratio = "N/A"
-
+    volume_ratio = round((volume_24h / market_cap) * 100, 2) if market_cap > 0 else "N/A"
     score_long = 0
     score_short = 0
 
@@ -1379,31 +1141,23 @@ def detect_advanced_move(direction, perf, tf_main):
     range_position = tf_main.get("range_position", "N/A")
     breakout = tf_main.get("breakout", "N/A")
 
-    advanced = False
-    alert = "Non"
-
     if direction == "LONG":
         if range_position != "N/A" and range_position > 85 and perf > 5:
-            advanced = True
-            alert = "Mouvement déjà avancé"
-        elif breakout == "Breakout" and perf > 8:
-            advanced = True
-            alert = "Breakout déjà loin"
+            return True, "Mouvement déjà avancé"
+        if breakout == "Breakout" and perf > 8:
+            return True, "Breakout déjà loin"
 
-    elif direction == "SHORT":
+    if direction == "SHORT":
         if range_position != "N/A" and range_position < 15 and perf < -5:
-            advanced = True
-            alert = "Mouvement déjà avancé"
-        elif breakout == "Breakdown" and perf < -8:
-            advanced = True
-            alert = "Breakdown déjà loin"
+            return True, "Mouvement déjà avancé"
+        if breakout == "Breakdown" and perf < -8:
+            return True, "Breakdown déjà loin"
 
-    return advanced, alert
+    return False, "Non"
 
 
 def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advanced, funding_bias, oi_bias):
     risk = 50
-
     structure = tf_main.get("structure", "")
     range_position = tf_main.get("range_position", "N/A")
 
@@ -1444,13 +1198,10 @@ def calculate_risk_score(direction, tf_main, force_label, volume_momentum, advan
     risk = max(0, min(100, risk))
 
     if risk <= 35:
-        risk_label = f"{risk}/100 — faible"
-    elif risk <= 60:
-        risk_label = f"{risk}/100 — moyen"
-    else:
-        risk_label = f"{risk}/100 — élevé"
-
-    return risk, risk_label
+        return risk, f"{risk}/100 — faible"
+    if risk <= 60:
+        return risk, f"{risk}/100 — moyen"
+    return risk, f"{risk}/100 — élevé"
 
 
 def build_trade_plan(direction, price, tf_main):
@@ -1462,44 +1213,26 @@ def build_trade_plan(direction, price, tf_main):
     if direction == "LONG":
         entry = price * 0.99
         invalidation = entry * (1 - stop_percent / 100)
-
-        if range_position != "N/A" and range_position > 85:
-            plan = "Attendre pullback long"
-        else:
-            plan = "Long possible sur pullback"
+        plan = "Attendre pullback long" if range_position != "N/A" and range_position > 85 else "Long possible sur pullback"
 
     elif direction == "SHORT":
         entry = price * 1.01
         invalidation = entry * (1 + stop_percent / 100)
-
-        if range_position != "N/A" and range_position < 15:
-            plan = "Attendre rebond short"
-        else:
-            plan = "Short possible sur rebond"
+        plan = "Attendre rebond short" if range_position != "N/A" and range_position < 15 else "Short possible sur rebond"
 
     else:
-        entry = "N/A"
-        invalidation = "N/A"
-        plan = "Pas de plan"
+        return "Pas de plan", "N/A", "N/A"
 
-    if isinstance(entry, float):
-        entry = round(entry, 6)
-
-    if isinstance(invalidation, float):
-        invalidation = round(invalidation, 6)
-
-    return plan, entry, invalidation
+    return plan, round(entry, 6), round(invalidation, 6)
 
 
-def decide_agent_status(direction, score_long, score_short, tf_1h, tf_4h, tf_1d, advanced, risk):
-    aligned_long = (
-        "Haussière" in tf_1h["structure"]
-        and ("Haussière" in tf_4h["structure"] or "Compression" in tf_4h["structure"])
+def decide_agent_status(direction, score_long, score_short, tf_1h, tf_4h, advanced, risk):
+    aligned_long = "Haussière" in tf_1h["structure"] and (
+        "Haussière" in tf_4h["structure"] or "Compression" in tf_4h["structure"]
     )
 
-    aligned_short = (
-        "Baissière" in tf_1h["structure"]
-        and ("Baissière" in tf_4h["structure"] or "Compression" in tf_4h["structure"])
+    aligned_short = "Baissière" in tf_1h["structure"] and (
+        "Baissière" in tf_4h["structure"] or "Compression" in tf_4h["structure"]
     )
 
     if direction == "LONG":
@@ -1567,12 +1300,7 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
     elif mode == "Short uniquement":
         direction = "SHORT"
     else:
-        if score_long > score_short:
-            direction = "LONG"
-        elif score_short > score_long:
-            direction = "SHORT"
-        else:
-            direction = "NEUTRE"
+        direction = "LONG" if score_long > score_short else "SHORT" if score_short > score_long else "NEUTRE"
 
     advanced, advanced_alert = detect_advanced_move(direction, perf, tf_main)
 
@@ -1594,7 +1322,6 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
         score_short,
         tf_1h,
         tf_4h,
-        tf_1d,
         advanced,
         risk_value
     )
@@ -1620,9 +1347,7 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
         preparation_note = ""
         score_agent_bonus = 0
 
-    score_agent = max(score_long, score_short) - risk_value + score_agent_bonus
-    score_agent = round(score_agent, 2)
-
+    score_agent = round(max(score_long, score_short) - risk_value + score_agent_bonus, 2)
     main_reason = f"{status_reason} {force_label}. {volume_momentum['label']}."
 
     if preparation_note:
@@ -1658,35 +1383,26 @@ def build_agent_row(symbol, coin, btc_perf, market_data):
     }
 
 
-# =========================
-# SCAN
-# =========================
-
 if scan_button:
     cmc_api_key = get_secret("CMC_API_KEY")
     coinalyze_api_key = get_secret("COINALYZE_API_KEY")
 
     if not cmc_api_key:
-        st.error("Clé API CoinMarketCap absente. Ajoute CMC_API_KEY dans les secrets Streamlit.")
+        st.error("Clé API CoinMarketCap absente.")
         st.stop()
 
     if not coinalyze_api_key:
-        st.warning("Clé API Coinalyze absente. L'app continue sans bougies/OI/funding.")
+        st.warning("Clé API Coinalyze absente.")
 
     symbols = [c.strip().upper() for c in watchlist.split(",") if c.strip()]
     symbols = symbols[:max_tokens]
-
-    if "BTC" not in symbols:
-        request_symbols = symbols + ["BTC"]
-    else:
-        request_symbols = symbols
+    request_symbols = symbols + ["BTC"] if "BTC" not in symbols else symbols
 
     rows = []
     errors = []
 
     try:
         cmc_data = fetch_cmc_quotes(",".join(request_symbols), cmc_api_key)
-
         btc_coin = extract_first_coin(cmc_data, "BTC")
 
         if btc_coin is None:
@@ -1698,30 +1414,17 @@ if scan_button:
         market_map = get_market_data_for_symbols(symbols, coinalyze_api_key)
 
         with st.expander("Debug Coinalyze", expanded=False):
-            st.write("OI + Funding activés :")
-            st.write(use_futures_confirm)
-
-            st.write("Nombre de marchés futures Coinalyze trouvés :")
-            st.write(st.session_state.get("debug_markets_count", "Non récupéré"))
-
-            st.write("Matching symboles :")
-            st.write(st.session_state.get("debug_symbol_map", {}))
-
-            st.write("Symboles Coinalyze utilisés :")
-            st.write(st.session_state.get("debug_coinalyze_symbols_used", []))
-
-            st.write("Intervalle OHLCV utilisé :")
-            st.write(st.session_state.get("debug_ohlcv_interval", "N/A"))
-
-            st.write("Nombre de réponses Funding / OI / OI history / OHLCV :")
+            st.write("OI + Funding activés :", use_futures_confirm)
+            st.write("Nombre de marchés futures :", st.session_state.get("debug_markets_count", "N/A"))
+            st.write("Matching symboles :", st.session_state.get("debug_symbol_map", {}))
+            st.write("Symboles utilisés :", st.session_state.get("debug_coinalyze_symbols_used", []))
+            st.write("Intervalle OHLCV :", st.session_state.get("debug_ohlcv_interval", "N/A"))
             st.write({
                 "funding": st.session_state.get("debug_funding_count", "N/A"),
                 "oi": st.session_state.get("debug_oi_count", "N/A"),
                 "oi_history": st.session_state.get("debug_oi_history_count", "N/A"),
                 "ohlcv": st.session_state.get("debug_ohlcv_count", "N/A"),
             })
-
-            st.write("Erreurs éventuelles :")
             st.write({
                 "future_markets": st.session_state.get("debug_future_markets_error", None),
                 "funding": st.session_state.get("debug_funding_error", None),
@@ -1752,11 +1455,10 @@ if scan_button:
         df = df.sort_values("Top surveillance", ascending=False)
 
         visible_columns = [c for c in selected_columns if c in df.columns]
-
         if not visible_columns:
             visible_columns = [c for c in DEFAULT_COLUMNS if c in df.columns]
 
-        st.subheader("Top coins à surveiller — Agent V8")
+        st.subheader("Top coins à surveiller — Agent V9")
         st.dataframe(df[visible_columns], use_container_width=True)
 
         best = df.iloc[0]
@@ -1808,11 +1510,6 @@ if scan_button:
         with st.expander("Table technique complète", expanded=False):
             st.dataframe(df, use_container_width=True)
 
-        st.caption(
-            "V8 : profils Supabase + colonnes personnalisables + agent de setup. "
-            "L'utilisateur peut sauvegarder sa watchlist, son affichage et ses paramètres."
-        )
-
     if errors:
         st.subheader("Cryptos non récupérées")
         for error in errors:
@@ -1822,9 +1519,9 @@ else:
     st.markdown("""
     <div class="binance-card">
         <div class="binance-card-title">En attente</div>
-        <div class="binance-card-value">Configure les paramètres, charge ou sauvegarde ton profil, puis lance le scan.</div>
+        <div class="binance-card-value">Crée ou charge un profil, règle tes paramètres, puis lance le scan.</div>
         <div class="small-text">
-            V8 : profils Supabase, watchlist sauvegardée, colonnes personnalisables, agent de setup avec structure 1h/4h/1j.
+            V9 : création de profil séparée, connexion propre, sauvegarde des paramètres, watchlist et colonnes.
         </div>
     </div>
     """, unsafe_allow_html=True)
